@@ -13,7 +13,8 @@ from math import sin, cos, pi, asin, sqrt, tan
 from scipy.integrate import ode
 from scipy.optimize import root
 from scipy.interpolate import interp1d
-from csgen.taylor_maccoll import taylor_maccoll_mach
+from csgen.taylor_maccoll import tm_stream_mach
+from csgen.stream_utils import PolarStreamline
 from csgen.shock_relations import theta_oblique                   
 from csgen.isentropic_flow import p_pt
 from csgen.shock_relations import pt2_pt1_oblique, p2_p1_oblique
@@ -29,115 +30,43 @@ def cone_z(x, y, theta, sign):
     a = tan(theta)
     return sign * np.sqrt((x*x + y*y) / (a*a))
 
-
-
 class BusemannField():
     # base class for Busemann flow fields
-    def __init__(self, thetas, us, vs, gamma, **kwargs):
+    def __init__(self, thetas, us, vs, rs, gamma, **kwargs):
         self.thetas = thetas
         self.us = us
         self.vs = vs
+        self.rs = rs
         self.gamma = gamma
         self.mu = pi - self.thetas[-1]
     
-    class stream():
-        def __init__(self, thetas, rs):
-            self.thetas = thetas
-            self.rs = rs
+    def streamline(self, phi=pi/2):
+        # construct phi array
+        phis = np.full((len(self.rs)), phi)
 
-
-
-    def streamline(self, scale=[1, 1, 1], translate=[0, 0, 0], trunc_angle=0, 
-        r0=1, n_steps=10000, verbosity=0, print_freq=10):
-        
-        def stream_eqn(theta, r):
-            # polar form of the streamline equation
-            global i
-            u = self.us[i]
-            v = self.vs[i]
-            return r * u / v
-
-        # integration settings 
-        r = ode(stream_eqn).set_integrator('DOP853', nsteps=n_steps)
-        r.set_initial_value([r0], self.thetas[0])
-        rs = [r0]
-        dt = self.thetas[1] - self.thetas[0]
-
-        # begin integration
-        if verbosity == 1:
-            print('Integrating streamline equation. \n')
-        global i
-        i = 0
-        while r.successful() and i < len(self.thetas)-1:
-            r.integrate(r.t + dt)
-            if verbosity == 1 and i % print_freq == 0:
-                str_1 = f'Step={i} '
-                str_2 = f'theta={r.t * 180/pi:.4} '
-                str_3 = f'r={r.y[0]:.4}'
-                print(str_1 + str_2 + str_3)
-            rs.append(r.y[0])
-            i += 1
-
-        if trunc_angle == 0:
-            coords = np.nan * np.ones((len(rs), 3))
-            for i in range(len(coords)):
-                coords[i][0] = scale[0] * 0.0  + translate[0]
-                coords[i][1] = scale[1] * rs[i] * sin(self.thetas[i]) + \
-                               translate[1]
-                coords[i][2] = scale[2] * rs[i] * cos(self.thetas[i]) + \
-                               translate[2]
-        else:
-            # calculate theta value at which contour is trimmed
-            theta_trim = self.thetas[-1] - trunc_angle
-            
-            # find index of max theta value that is less than theta_trim
-            ind = 0
-            theta_i = self.thetas[ind]
-            while theta_i < theta_trim:
-                ind += 1
-                theta_i = self.thetas[ind]
-            
-            # use quadratic interpolation to find r value at trim point
-            rs_fit = interp1d(self.thetas[ind-2:ind+1], rs[ind-2:ind+1], 
-                kind='quadratic')
-            r_trim = rs_fit(theta_trim)
-            
-            # calculate Cartesian coordinates
-            coords = np.nan * np.ones((len(rs[:ind])+1, 3))
-            for i in range(len(coords[:ind])):
-                coords[i][0] = scale[0] * 0.0 + translate[0]
-                coords[i][1] = scale[1] * rs[i] * sin(self.thetas[i]) + \
-                               translate[1]
-                coords[i][2] = scale[2] * rs[i] * cos(self.thetas[i]) + \
-                               translate[2]
-            
-            # calculate Cartesian coordinates at trim point
-            coords[-1][0] = scale[0] * 0.0 + translate[0]
-            coords[-1][1] = scale[1] * r_trim * sin(theta_trim) + translate[1] 
-            coords[-1][2] = scale[2] * r_trim * cos(theta_trim) + translate[2]
-
-        return coords
+        # return streamline with coords that are in order of increasing x
+        return PolarStreamline(self.rs[::-1], self.thetas[::-1], phis)
     
     def surface(self, n_streams=100):
         # generate surface grid for 3D Busemann inlet
         phis_b = np.linspace(pi/2, 5*pi/2, n_streams)
         stream = self.streamline()
-        buse_xs = np.zeros((len(phis_b), len(stream)))
-        buse_ys = np.zeros((len(phis_b), len(stream)))
-        buse_zs = np.zeros((len(phis_b), len(stream)))
+        buse_xs = np.zeros((len(phis_b), len(stream.xs)))
+        buse_ys = np.zeros((len(phis_b), len(stream.xs)))
+        buse_zs = np.zeros((len(phis_b), len(stream.xs)))
         for i in range(len(phis_b)):
-            for j in range(len(stream)):
-                r_j = sqrt(stream[j][0]**2 + stream[j][0]**2)
-                buse_xs[i][j] = r_j * sin(self.thetas[j]) * cos(phis_b[i])
-                buse_ys[i][j] = r_j * sin(self.thetas[j]) * sin(phis_b[i])
-                buse_zs[i][j] = r_j * cos(self.thetas[j])
+            for j in range(len(stream.xs)):
+                r_j = sqrt(stream.xs[j]**2 + stream.ys[j]**2 + stream.zs[j]**2)
+                buse_xs[i][j] = r_j * sin(stream.thetas[j]) * cos(phis_b[i])
+                buse_ys[i][j] = r_j * sin(stream.thetas[j]) * sin(phis_b[i])
+                buse_zs[i][j] = r_j * cos(stream.thetas[j])
         return [buse_xs, buse_ys, buse_zs]
 
     def mach_cone_surface(self, n_r=100, n_phi=100):
         # generate surface grid for 3D entrance Mach cone
-        stream_coords = self.streamline()
-        rs_mc = np.linspace(0, stream_coords[-1][1], n_r)
-        phis_mc = np.linspace(0, 2 * pi, n_phi)
+        stream = self.streamline()
+        rs_mc = np.linspace(0, stream.ys[0], n_r)
+        phis_mc = np.linspace(0, 2*pi, n_phi)
         Rs_mc, Phis_mc = np.meshgrid(rs_mc, phis_mc)
         mc_xs = cone_x(Rs_mc, Phis_mc)
         mc_ys = cone_y(Rs_mc, Phis_mc)
@@ -146,9 +75,9 @@ class BusemannField():
 
     def term_shock_surface(self, n_r=100, n_phi=100):
         # generate surface grid for 3D terminating shock
-        stream_coords = self.streamline()
-        rs_ts = np.linspace(0, stream_coords[0][1], n_r)
-        phis_ts = np.linspace(0, 2 * pi, n_phi)
+        stream = self.streamline()
+        rs_ts = np.linspace(0, stream.ys[-1], n_r)
+        phis_ts = np.linspace(0, 2*pi, n_phi)
         Rs_ts, Phis_ts = np.meshgrid(rs_ts, phis_ts)
         ts_xs = cone_x(Rs_ts, Phis_ts)
         ts_ys = cone_y(Rs_ts, Phis_ts)
@@ -184,8 +113,8 @@ def sing_metric(u, v, theta):
     """
     return u + v / tan(theta)
 
-def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
-    print_freq=100, interp_sing=True, verbosity=1):
+def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, r0=1, 
+    n_steps=10000, print_freq=100, interp_sing=True, verbosity=1):
     """
     Creates a Busemann flow field characterised by M2 and beta2.
 
@@ -203,14 +132,14 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
     """
     # initial condition
     a2 = theta_oblique(beta2, M2, gamma)
-    theta2 = beta - a2
+    theta2 = beta2 - a2
     u2 = M2 * cos(beta2)
     v2 = -M2 * sin(beta2)
 
     # integration settings
-    r = ode(taylor_maccoll_mach).set_integrator('DOP853', nsteps=n_steps)
-    ic = [theta2, u2, v2]
-    r.set_initial_value([ic[1], ic[2]], ic[0])
+    r = ode(tm_stream_mach).set_integrator('dop853', nsteps=n_steps)
+    ic = [theta2, u2, v2, r0]
+    r.set_initial_value([ic[1], ic[2], ic[3]], ic[0])
     r.set_f_params(gamma)
     dt = dtheta
     
@@ -225,6 +154,7 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
     thetas = [ic[0]]
     us = [ic[1]]
     vs = [ic[2]]
+    rs = [ic[3]]
     sms = [sing_metric(r.y[0], r.y[1], r.t)]
     
     # integrate Taylor-Maccoll equations
@@ -241,8 +171,13 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
         thetas.append(r.t)
         us.append(r.y[0])
         vs.append(r.y[1])
+        rs.append(r.y[2])
         sms.append(sing_metric(r.y[0], r.y[1], r.t))
         i += 1
+
+    # check if integration failed
+    if r.successful() == False:
+        raise Exception('Integration failed.')
 
     # use interpolation to find singularity point
     if interp_sing == True:
@@ -250,6 +185,7 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
         interp_thetas = interp1d(sms[-4:], thetas[-4:], kind='cubic')
         interp_us = interp1d(thetas[-4:], us[-4:], kind='cubic')
         interp_vs = interp1d(thetas[-4:], vs[-4:], kind='cubic')
+        interp_rs = interp1d(thetas[-4:], rs[-4:], kind='cubic')
 
         # locate the theta value at the singularity
         theta_sing = interp_thetas(0)
@@ -257,16 +193,20 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
         # interpolate u, v and r at theta_sing
         u_sing = interp_us(theta_sing)
         v_sing = interp_vs(theta_sing)
+        r_sing = interp_rs(theta_sing)
 
         # replace last value of thetas, us, vs and rs with interpolated values
         thetas[-1] = theta_sing
         us[-1] = u_sing
         vs[-1] = v_sing
+        rs[-1] = r_sing
+        sms[-1] = 0
     else:
         # remove singularity from solution
+        thetas.pop(-1)
         us.pop(-1)
         vs.pop(-1)
-        thetas.pop(-1)
+        rs.pop(-1)
         sms.pop(-1)
 
     # print integration termination statement
@@ -299,7 +239,7 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
         print(f'calculated entrance shock angle = {mu_calc:.4} deg')
     
     # return Busemann flow field object
-    buse = Busemann(thetas, us, vs, gamma)
+    buse = BusemannField(thetas, us, vs, rs, gamma)
     buse.beta2 = beta2
     buse.M2 = M2
     buse.sms = sms

@@ -3,7 +3,6 @@ Streamline-tracing tools.
 
 Author: Reece Otto 08/11/2021
 """
-from nurbskit.transform import polar
 from nurbskit.path import BSpline
 from nurbskit.spline_fitting import global_curve_interp
 from nurbskit.point_inversion import point_proj_path
@@ -12,17 +11,6 @@ import numpy as np
 from scipy import optimize
 
 class Streamline():
-    def __init__(self, xs, ys, zs, **kwargs):
-        # check if rs, thetas and phis have same length
-        if len(xs) != len(ys):
-            raise AttributeError('The x and y arrays have different length.')
-        if len(xs) != len(zs)
-            raise AttributeError('The x and z arrays have different length.')
-
-        # assign Cartesian coordinates to object
-        self.xs = xs
-        self.ys = ys
-        self.zs = zs
 
     def scale(x_scale, y_scale, z_scale):
         for i in len(self.thetas):
@@ -92,7 +80,7 @@ class PolarStreamline(Streamline):
         # check if rs, thetas and phis have same length
         if len(rs) != len(thetas):
             raise AttributeError('Radius and theta arrays have different size.')
-        if len(rs) != len(phis)
+        if len(rs) != len(phis):
             raise AttributeError('Radius and phi arrays have different size.')
 
         # assign polar coordinates
@@ -104,18 +92,18 @@ class PolarStreamline(Streamline):
         xs = np.nan * np.ones(len(self.thetas))
         ys = np.nan * np.ones(len(self.thetas))
         zs = np.nan * np.ones(len(self.thetas))
-        for i in len(self.thetas):
-            for j in len(self.phis):
-                xs[i] = self.rs[i] * cos(self.phis[j]) * sin(self.thetas[i])
-                ys[i] = self.rs[i] * sin(self.phis[j]) * sin(self.thetas[i])
-                zs[i] = self.rs[i] * cos(self.thetas[j])
+        for i in range(len(self.thetas)):
+            for j in range(len(self.phis)):
+                xs[i] = self.rs[i] * sin(self.thetas[i]) * cos(self.phis[j])
+                ys[i] = self.rs[i] * sin(self.thetas[i]) * sin(self.phis[j]) 
+                zs[i] = self.rs[i] * cos(self.thetas[i])
         
         # assign Cartesian coordinates to object
         self.xs = xs
         self.ys = ys
         self.zs = zs
 
-def busemann_stream_trace(shape_coords, field, stream_coords, plane='capture'):
+def busemann_stream_trace(shape_coords, field, plane='capture'):
     if plane == 'capture':
         print('\nTracing capture shape through flow field.')
     elif plane == 'exit':
@@ -126,44 +114,48 @@ def busemann_stream_trace(shape_coords, field, stream_coords, plane='capture'):
     # extract coords of entrance or exit shape
     shape_xs, shape_ys = shape_coords[:,0], shape_coords[:,1]
     n_streams = len(shape_xs)
+
+    # intialise raw streamline to perform transformations on
+    stream = field.streamline()
+    n_z = len(stream.zs)
     
     # get phi and radial scaling factors for each streamline of shape
     shape_zs = np.nan * np.zeros(len(shape_xs))
     phis_shape = np.nan * np.zeros(len(shape_xs))
     sfs_shape = np.nan * np.zeros(len(shape_xs))
-    for i in range(len(shape_xs)):
+    for i in range(n_streams):
         phis_shape[i] = atan2(shape_ys[i], shape_xs[i])
         if plane == 'capture':
+            # project capture shape onto Mach wave
             shape_zs[i] = -sqrt((shape_xs[i]**2 + shape_ys[i]**2) / \
                 (tan(field.mu)**2))
             r_shape = sqrt(shape_xs[i]**2 + shape_ys[i]**2 + shape_zs[i]**2)
-            sfs_shape[i] = r_shape / \
-            sqrt(stream_coords[-1][0]**2 + stream_coords[-1][1]**2)
+            sfs_shape[i] = r_shape / stream.rs[0]
+            
         else:
+            # project capture shape onto terminating shock
             shape_zs[i] = sqrt((shape_xs[i]**2 + shape_ys[i]**2) / \
-            (tan(field.thetas[0])**2))
+            (tan(stream.thetas[-1])**2))
             r_shape = sqrt(shape_xs[i]**2 + shape_ys[i]**2 + shape_zs[i]**2)
-            sfs_shape[i] = r_shape / \
-            sqrt(stream_coords[0][0]**2 + stream_coords[0][1]**2)
+            sfs_shape[i] = r_shape / stream.rs[-1]
             
     # find Cartesian coordinates of each point along each streamline
-    stream_coords = field.streamline()
-    inlet_xs = np.zeros((len(shape_xs), len(stream_coords)))
-    inlet_ys = np.zeros((len(shape_xs), len(stream_coords)))
-    inlet_zs = np.zeros((len(shape_xs), len(stream_coords)))
-    for i in range(len(shape_xs)):
-        for j in range(len(stream_coords)):
-            r_j = sqrt(stream_coords[j][0]**2 + stream_coords[j][1]**2)
-            x_b_rot = r_j * sin(field.thetas[j]) * cos(phis_shape[i])
-            y_b_rot = r_j * sin(field.thetas[j]) * sin(phis_shape[i])
-            z_b_rot = r_j * cos(field.thetas[j])
-            rxyz_b_rot = sqrt(x_b_rot**2 + y_b_rot**2 + z_b_rot**2)
+    inlet_xs = np.zeros((n_streams, n_z))
+    inlet_ys = np.zeros((n_streams, n_z))
+    inlet_zs = np.zeros((n_streams, n_z))
+    for i in range(n_streams):
+        for j in range(n_z):
+            r_j = sqrt(stream.xs[j]**2 + stream.ys[j]**2 + stream.zs[j]**2)
+            x_b_rot = r_j * sin(stream.thetas[j]) * cos(phis_shape[i])
+            y_b_rot = r_j * sin(stream.thetas[j]) * sin(phis_shape[i])
+            z_b_rot = r_j * cos(stream.thetas[j])
+            r_buse = sqrt(x_b_rot**2 + y_b_rot**2 + z_b_rot**2)
             
-            inlet_xs[i][j] = sfs_shape[i] * rxyz_b_rot * sin(field.thetas[j]) \
+            inlet_xs[i][j] = sfs_shape[i] * r_buse * sin(stream.thetas[j]) \
                              * cos(phis_shape[i])
-            inlet_ys[i][j] = sfs_shape[i] * rxyz_b_rot * sin(field.thetas[j]) \
+            inlet_ys[i][j] = sfs_shape[i] * r_buse * sin(stream.thetas[j]) \
                              * sin(phis_shape[i])
-            inlet_zs[i][j] = sfs_shape[i] * rxyz_b_rot * cos(field.thetas[j])
+            inlet_zs[i][j] = sfs_shape[i] * r_buse * cos(stream.thetas[j])
     
     return np.array([inlet_xs, inlet_ys, inlet_zs])
 
@@ -231,6 +223,7 @@ def waverider_stream_trace(base_coords, stream_coords, z_base, n_z, tol=1E-4):
         # return L3 norm between given Cartesian point and point projected on
         # B-Spline path
         curve_point = stream_spline(u_cand)
+
         return np.linalg.norm(point - curve_point)
 
     print('\nRunning streamline tracer.')

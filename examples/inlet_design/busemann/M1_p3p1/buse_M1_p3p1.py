@@ -15,31 +15,27 @@ gamma = 1.4                   # ratio of specific heats
 p1 = 2 * q1 / (gamma * M1*M1) # entrance static pressure [Pa]
 p3 = 50E3                     # desired exit pressure [Pa]
 p3_p1 = p3/p1                 # desired compression ratio
-dtheta = 0.001                # theta step size [rad]
+dtheta = 0.05 * pi/180        # theta step size [rad]
 field = busemann_M1_p3p1(M1, p3_p1, gamma, dtheta)
 
 # create plot of streamline
 fig = plt.figure(figsize=(16, 9))
 plt.rcParams.update({
-        "text.usetex": True,
-        "font.family": "sans-serif",
-        "font.size": 20
-        })
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.size": 20
+    })
 ax = plt.axes()
-stream_coords = field.xyz_coords()
-ax.plot(stream_coords[:,2], stream_coords[:,1], 'k-', label='Busemann Contour')
-axis_coords = np.array([[np.amin(stream_coords[:,2]), 0],
-	                    [np.amax(stream_coords[:,2]), 0]])
-ax.plot(axis_coords[:,0], axis_coords[:,1], 'k-.', label='Axis of Symmetry')
-mw_coords = np.array([[stream_coords[:,2][-1], stream_coords[:,1][-1]],
-	                  [0, 0]])
-ax.plot(mw_coords[:,0], mw_coords[:,1], 'r--', label='Entrance Mach Wave')
-ts_coords = np.array([[0, 0],
-	                  [stream_coords[:,2][0], stream_coords[:,1][0]]])
-ax.plot(ts_coords[:,0], ts_coords[:,1], 'r-', label='Terminating Shock Wave')
+stream = field.streamline()
+ax.plot(stream.zs, stream.ys, 'k-', label='Busemann Contour')
+ax.plot([stream.zs[0], stream.zs[-1]], [0, 0], 'k-.', label='Axis of Symmetry')
+ax.plot([stream.zs[0], 0], [stream.ys[0], 0], 'r--', label='Entrance Mach Wave')
+ax.plot([0, stream.zs[-1]], [0, stream.ys[-1]], 'r-', 
+    label='Terminating Shock Wave')
 ax.set_xlabel('$z$')
 ax.set_ylabel('$y$')
 plt.axis('equal')
 plt.grid()
 plt.legend()
 plt.show()
+fig.savefig('buse_M1_p3p1.svg', bbox_inches='tight')

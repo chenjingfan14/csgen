@@ -6,7 +6,7 @@ Author: Reece Otto 14/12/2021
 from csgen.atmosphere import atmos_interp
 from csgen.conical_field import conical_M0_thetac
 from csgen.isentropic_flow import p_pt
-from csgen.streamline_tracer import waverider_stream_trace
+from csgen.stream_utils import waverider_stream_trace
 from nurbskit.path import Ellipse, BSpline
 from nurbskit.utils import auto_knot_vector
 import matplotlib.pyplot as plt
@@ -28,7 +28,7 @@ dtheta = 0.01 * pi / 180 # integration step size (rad)
 thetac = 7 * pi / 180    # angle of conical shock (rad)
 
 # geometric properties of waverider
-z_base = 5      # z plane where base of waverider exists
+z_base = 5     # z plane where base of waverider exists
 n_streams = 51 # number of streamlines to be traced around base shape
 n_z = 51       # number of points evaluated in z direction
 
@@ -141,7 +141,7 @@ def cone_z(x, y, theta, sign):
     return sign * np.sqrt((x*x + y*y) / (a*a))
 
 # conical shock surface
-rs_cs = np.linspace(0, z_base * tan(field.beta), n_streams)
+rs_cs = np.linspace(0, 11 * tan(field.beta), n_streams)
 phis_cs = np.linspace(0, 2 * pi, n_streams)
 Rs_cs, Phis_cs = np.meshgrid(rs_cs, phis_cs)
 X_cs = cone_x(Rs_cs, Phis_cs)
@@ -149,7 +149,7 @@ Y_cs = cone_y(Rs_cs, Phis_cs)
 Z_cs = cone_z(X_cs, Y_cs, field.beta, 1)
 
 # imaginary cone surface
-rs_c = np.linspace(0, z_base * tan(field.thetac), n_streams)
+rs_c = np.linspace(0, 11 * tan(field.thetac), n_streams)
 phis_c = np.linspace(0, 2 * pi, n_streams)
 Rs_c, Phis_c = np.meshgrid(rs_c, phis_c)
 X_c = cone_x(Rs_c, Phis_c)
