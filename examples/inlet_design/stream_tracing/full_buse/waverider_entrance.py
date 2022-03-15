@@ -7,7 +7,7 @@ from csgen.busemann import busemann_M1_p3p1
 from csgen.stream_utils import busemann_stream_trace
 from nurbskit.path import Ellipse
 import pyvista as pv
-from math import pi, sqrt
+from math import pi, sqrt, tan
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
@@ -22,6 +22,7 @@ p3 = 50E3              # desired exit pressure [Pa]
 p3_p1 = p3/p1          # desired compression ratio
 dtheta = 0.05 * pi/180 # theta step size [rad]
 n_streams = 101        # number of streamlines
+z_plane = 5            # z-coordinate of waverider exit plane
 
 field = busemann_M1_p3p1(M1, p3_p1, gamma, dtheta, beta2_guess=0.2312, 
     M2_guess=5.45, print_freq=1000)
@@ -84,12 +85,32 @@ plt.axis('equal')
 plt.grid()
 plt.legend()
 plt.show()
+fig.savefig('capture_shape.svg', bbox_inches='tight')
 
-# run streamline tracer and save the surface as a VTK file
+# run streamline tracer and re-position inlet to exit plane of waverider
 inlet_coords = busemann_stream_trace(cap_coords, field)
+min_z_inlet = np.amin(inlet_coords[2])
+max_y_arg = np.argmax(cap_coords[:,1])
+max_z_cap = -sqrt((cap_coords[:,0][max_y_arg]**2 + \
+    cap_coords[:,1][max_y_arg]**2) / (tan(field.mu)**2))
+min_y_arg = np.argmin(cap_coords[:,1])
+min_z_cap = -sqrt((cap_coords[:,0][min_y_arg]**2 + \
+    cap_coords[:,1][min_y_arg]**2) / (tan(field.mu)**2))
+print(f"""Attachment point: [{cap_coords[:,0][max_y_arg]:.4}, 
+    {cap_coords[:,1][max_y_arg]:.4}, {max_z_cap:.4}""")
+
+for i in range(len(inlet_coords[0])):
+    inlet_coords[1][i] -= abs(min_y) + 0.05*stream.ys[0]
+    inlet_coords[2][i] += abs(min_z_cap) + z_plane
+    #inlet_coords[2][i] += abs(max_z_cap) + z_plane
+    #inlet_coords[2][i] += abs(min_z_inlet) + z_plane
+
+
 inlet_grid = pv.StructuredGrid(inlet_coords[0], inlet_coords[1], 
         inlet_coords[2])
 inlet_grid.save("waverider_inlet.vtk")
+inlet_poly = inlet_grid.extract_surface()
+inlet_grid.save("waverider_inlet_poly.vtk")
 
 # save Busemann field as VTK file
 buse_surf = field.surface(n_streams)

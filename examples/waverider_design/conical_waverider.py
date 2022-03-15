@@ -91,7 +91,7 @@ shock_base_coords = shock_base.list_eval(n_points=n_streams)
 
 # create baseline contour for bottom surface of waverider
 max_y = 1.05 * np.amin(cone_base_coords[:,1])
-phi_intercept = 50 * pi / 180
+phi_intercept = 55 * pi / 180
 max_x = r_shock * cos(phi_intercept)
 min_y = -r_shock * sin(phi_intercept)
 P = [[-max_x, min_y], [-max_x/2, (max_y + min_y)/1.9], [-max_x/3, max_y], 
@@ -127,7 +127,7 @@ plt.show()
 #------------------------------------------------------------------------------#
 # run streamline tracer
 wr_coords = waverider_stream_trace(wr_base_coords, stream_coords, z_base, n_z, 
-	tol=1E-6)
+	tol=1E-5)
 
 # generate shockwave cone surfaces
 def cone_x(r, phi):
