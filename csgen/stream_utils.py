@@ -116,8 +116,7 @@ def busemann_stream_trace(shape_coords, field, plane='capture'):
     n_streams = len(shape_xs)
 
     # intialise raw streamline to perform transformations on
-    stream = field.streamline()
-    n_z = len(stream.zs)
+    n_z = len(field.zs)
     
     # get phi and radial scaling factors for each streamline of shape
     shape_zs = np.nan * np.zeros(len(shape_xs))
@@ -130,34 +129,32 @@ def busemann_stream_trace(shape_coords, field, plane='capture'):
             shape_zs[i] = -sqrt((shape_xs[i]**2 + shape_ys[i]**2) / \
                 (tan(field.mu)**2))
             r_shape = sqrt(shape_xs[i]**2 + shape_ys[i]**2 + shape_zs[i]**2)
-            sfs_shape[i] = r_shape / stream.rs[0]
+            sfs_shape[i] = r_shape / field.rs[-1]
             
         else:
             # project capture shape onto terminating shock
             shape_zs[i] = sqrt((shape_xs[i]**2 + shape_ys[i]**2) / \
-            (tan(stream.thetas[-1])**2))
+            (tan(field.thetas[0])**2))
             r_shape = sqrt(shape_xs[i]**2 + shape_ys[i]**2 + shape_zs[i]**2)
-            sfs_shape[i] = r_shape / stream.rs[-1]
+            sfs_shape[i] = r_shape / field.rs[0]
             
     # find Cartesian coordinates of each point along each streamline
-    inlet_xs = np.zeros((n_streams, n_z))
-    inlet_ys = np.zeros((n_streams, n_z))
-    inlet_zs = np.zeros((n_streams, n_z))
+    inlet = np.nan * np.ones((n_streams, n_z, 3))
     for i in range(n_streams):
         for j in range(n_z):
-            r_j = sqrt(stream.xs[j]**2 + stream.ys[j]**2 + stream.zs[j]**2)
-            x_b_rot = r_j * sin(stream.thetas[j]) * cos(phis_shape[i])
-            y_b_rot = r_j * sin(stream.thetas[j]) * sin(phis_shape[i])
-            z_b_rot = r_j * cos(stream.thetas[j])
+            r_j = sqrt(field.xs[j]**2 + field.ys[j]**2 + field.zs[j]**2)
+            x_b_rot = r_j * sin(field.thetas[j]) * cos(phis_shape[i])
+            y_b_rot = r_j * sin(field.thetas[j]) * sin(phis_shape[i])
+            z_b_rot = r_j * cos(field.thetas[j])
             r_buse = sqrt(x_b_rot**2 + y_b_rot**2 + z_b_rot**2)
             
-            inlet_xs[i][j] = sfs_shape[i] * r_buse * sin(stream.thetas[j]) \
+            inlet[i][j][0] = sfs_shape[i] * r_buse * sin(field.thetas[j]) \
                              * cos(phis_shape[i])
-            inlet_ys[i][j] = sfs_shape[i] * r_buse * sin(stream.thetas[j]) \
+            inlet[i][j][1] = sfs_shape[i] * r_buse * sin(field.thetas[j]) \
                              * sin(phis_shape[i])
-            inlet_zs[i][j] = sfs_shape[i] * r_buse * cos(stream.thetas[j])
+            inlet[i][j][2] = sfs_shape[i] * r_buse * cos(field.thetas[j])
     
-    return np.array([inlet_xs, inlet_ys, inlet_zs])
+    return inlet
 
 def waverider_stream_trace(base_coords, stream_coords, z_base, n_z, tol=1E-4):
     """

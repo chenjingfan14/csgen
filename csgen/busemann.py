@@ -39,50 +39,59 @@ class BusemannField():
         self.rs = rs
         self.gamma = gamma
         self.mu = pi - self.thetas[-1]
-    
-    def streamline(self, phi=pi/2):
-        # construct phi array
-        phis = np.full((len(self.rs)), phi)
+        
+        # calculate Cartesian coordinates of raw streamline
+        self.xs = np.zeros(len(self.thetas))
+        self.ys = np.nan * np.ones(len(self.thetas))
+        self.zs = np.copy(self.ys)
+        for i in range(len(self.thetas)):
+            self.ys[i] = self.rs[i] * sin(self.thetas[i])
+            self.zs[i] = self.rs[i] * cos(self.thetas[i])
 
-        # return streamline with coords that are in order of increasing x
-        return PolarStreamline(self.rs[::-1], self.thetas[::-1], phis)
+        # also save Cartesian coordinates as array
+        self.raw_stream = np.nan * np.ones((len(self.thetas), 3))
+        for i in range(len(self.thetas)):
+            self.raw_stream[i] = [self.xs[i], self.ys[i], self.zs[i]]
     
     def surface(self, n_streams=100):
         # generate surface grid for 3D Busemann inlet
         phis_b = np.linspace(pi/2, 5*pi/2, n_streams)
-        stream = self.streamline()
-        buse_xs = np.zeros((len(phis_b), len(stream.xs)))
-        buse_ys = np.zeros((len(phis_b), len(stream.xs)))
-        buse_zs = np.zeros((len(phis_b), len(stream.xs)))
+        buse_surf = np.nan * np.ones((len(phis_b), len(self.thetas), 3))
         for i in range(len(phis_b)):
-            for j in range(len(stream.xs)):
-                r_j = sqrt(stream.xs[j]**2 + stream.ys[j]**2 + stream.zs[j]**2)
-                buse_xs[i][j] = r_j * sin(stream.thetas[j]) * cos(phis_b[i])
-                buse_ys[i][j] = r_j * sin(stream.thetas[j]) * sin(phis_b[i])
-                buse_zs[i][j] = r_j * cos(stream.thetas[j])
-        return [buse_xs, buse_ys, buse_zs]
+            for j in range(len(self.thetas)):
+                r_j = sqrt(self.xs[j]**2 + self.ys[j]**2 + self.zs[j]**2)
+                buse_surf[i][j][0] = r_j * sin(self.thetas[j]) * cos(phis_b[i])
+                buse_surf[i][j][1] = r_j * sin(self.thetas[j]) * sin(phis_b[i])
+                buse_surf[i][j][2] = r_j * cos(self.thetas[j])
+        return buse_surf
 
     def mach_cone_surface(self, n_r=100, n_phi=100):
         # generate surface grid for 3D entrance Mach cone
-        stream = self.streamline()
-        rs_mc = np.linspace(0, stream.ys[0], n_r)
+        rs_mc = np.linspace(0, self.ys[-1], n_r)
         phis_mc = np.linspace(0, 2*pi, n_phi)
         Rs_mc, Phis_mc = np.meshgrid(rs_mc, phis_mc)
         mc_xs = cone_x(Rs_mc, Phis_mc)
         mc_ys = cone_y(Rs_mc, Phis_mc)
         mc_zs = cone_z(mc_xs, mc_ys, self.mu, -1)
-        return [mc_xs, mc_ys, mc_zs]
+        mc_surf = np.nan * np.ones((len(rs_mc), len(phis_mc), 3))
+        for i in range(len(rs_mc)):
+            for j in range(len(phis_mc)):
+                mc_surf[i][j] = [mc_xs[i][j], mc_ys[i][j], mc_zs[i][j]]
+        return mc_surf
 
     def term_shock_surface(self, n_r=100, n_phi=100):
         # generate surface grid for 3D terminating shock
-        stream = self.streamline()
-        rs_ts = np.linspace(0, stream.ys[-1], n_r)
+        rs_ts = np.linspace(0, self.ys[0], n_r)
         phis_ts = np.linspace(0, 2*pi, n_phi)
         Rs_ts, Phis_ts = np.meshgrid(rs_ts, phis_ts)
         ts_xs = cone_x(Rs_ts, Phis_ts)
         ts_ys = cone_y(Rs_ts, Phis_ts)
         ts_zs = cone_z(ts_xs, ts_ys, self.thetas[0], 1)
-        return [ts_xs, ts_ys, ts_zs]
+        ts_surf = np.nan * np.ones((len(rs_ts), len(phis_ts), 3))
+        for i in range(len(rs_ts)):
+            for j in range(len(phis_ts)):
+                ts_surf[i][j] = [ts_xs[i][j], ts_ys[i][j], ts_zs[i][j]]
+        return ts_surf
 
     def M3(self):
         # exit Mach number
@@ -209,18 +218,13 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, r0=1,
         rs.pop(-1)
         sms.pop(-1)
 
-    # print integration termination statement
+    # check if integration failed
     if r.successful == False:
         raise AssertionError('Integration failed.')
 
+    # print solution at final step
     if verbosity == 1:
-        print('\nIntegration was terminated.')
-        reason = 'Reason: '
-        # print reason for integration termination
-        if sing_metric(r.y[0], r.y[1], r.t) >= 0:
-            print(reason + 'Taylor-Maccoll singularity detected. \n')
-        else:
-            print(reason + 'Unknown. \n')
+        print('\nIntegration was terminated due to singularity detection.')
         
         if interp_sing == True:
             print('Solution at interpolated singularity:')
@@ -245,9 +249,9 @@ def busemann_M2_beta2(M2, beta2, gamma=1.4, dtheta=0.001*pi/180, r0=1,
     buse.sms = sms
     return buse
 
-def busemann_M1_p3p1(M1, p3p1, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
-    print_freq=100, interp_sing=True, verbosity=1, beta2_guess=0.2410, 
-    M2_guess=5.768):
+def busemann_M1_p3p1(M1, p3p1, gamma=1.4, dtheta=0.001*pi/180, r0=1.0, 
+    n_steps=10000, print_freq=100, interp_sing=True, verbosity=1, 
+    beta2_guess=0.2410, M2_guess=5.768):
     # provide guess for beta2 and M2
     # beta2 = 14.5 deg (0.2410 rad), M2 = 5.5 is good for M = 10, p3 = 50kPa
     x_guess = [beta2_guess, M2_guess]
@@ -256,7 +260,7 @@ def busemann_M1_p3p1(M1, p3p1, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
         beta2 = x[0]
         M2 = x[1]
 
-        buse = busemann_M2_beta2(M2, beta2, gamma, dtheta=dtheta, 
+        buse = busemann_M2_beta2(M2, beta2, gamma, dtheta=dtheta, r0=r0,
             n_steps=n_steps, print_freq=print_freq, interp_sing=interp_sing, 
             verbosity=0)
         M1_calc = sqrt(buse.us[-1]**2 + buse.vs[-1]**2)
@@ -275,10 +279,11 @@ def busemann_M1_p3p1(M1, p3p1, gamma=1.4, dtheta=0.001*pi/180, n_steps=10000,
     if sol.success:
         print('\nRoot finder has converged. \n')
     else:
-        raise ValueError('Root finder failed to converge.')
+        raise AssertionError('Root finder failed to converge.')
     
     beta2 = sol.x[0]
     M2 = sol.x[1]
-    buse = busemann_M2_beta2(M2, beta2, gamma, dtheta=dtheta, n_steps=n_steps, 
-        print_freq=print_freq, interp_sing=interp_sing, verbosity=verbosity)
+    buse = busemann_M2_beta2(M2, beta2, gamma, dtheta=dtheta, r0=r0, 
+        n_steps=n_steps, print_freq=print_freq, interp_sing=interp_sing, 
+        verbosity=verbosity)
     return buse

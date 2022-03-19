@@ -178,6 +178,8 @@ wrs_grid = pv.StructuredGrid(wrs_coords[:,:,0], wrs_coords[:,:,1],
     wrs_coords[:,:,2])
 wrs_grid.save("waverider_shock.vtk")
 
+# convert 
+
 #------------------------------------------------------------------------------#
 #              Evaluate pressure field across base cross-section               #
 #------------------------------------------------------------------------------#
@@ -201,6 +203,7 @@ exit_delta = np.nan * np.ones((n_streams, n_y_points))
 exit_mach = np.nan * np.ones((n_streams, n_y_points))
 exit_pressure = np.nan * np.ones((n_streams, n_y_points))
 exit_temp = np.nan * np.ones((n_streams, n_y_points))
+exit_theta = np.nan * np.ones((n_streams, n_y_points))
 print('\nEvaluating flow field at exit plane.\n')
 for i in range(n_streams):
     for j in range(n_y_points):
@@ -211,12 +214,17 @@ for i in range(n_streams):
         # calculate theta but make slightly lower to ensure in valid range
         theta_ij = atan(sqrt(x_ij**2 + y_ij**2) / z_ij) - 1E-6
         exit_theta[i][j] = theta_ij
+        exit_theta[i][j] = theta_ij
         exit_mach[i][j] = field.M(theta_ij)
         exit_delta[i][j] = atan(field.v(theta_ij) / field.u(theta_ij))
         exit_pressure[i][j] = field.p(theta_ij, p0)
         exit_temp[i][j] = field.T(theta_ij, T0)
 
+max_p_ind = np.argmax(exit_pressure)
+theta_attach = exit_theta.flatten()[max_p_ind]
+
 # calculate average properties over plane
+print(f'Inlet attachment angle: {theta_attach*180/pi:.4} deg')
 print(f"""Average flow properties over exit plane:
 Theta = {np.average(exit_theta)*180/pi:.4} deg
 Flow angle = {np.average(exit_delta)*180/pi:.4} deg
