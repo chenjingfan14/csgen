@@ -8,7 +8,7 @@ from csgen.busemann import busemann_M1_p3p1
 from csgen.atmosphere import atmos_interp
 from csgen.shock_relations import beta_oblique, M2_oblique, p2_p1_oblique, \
                                   T2_T1_oblique
-from csgen.streamline_tracer import busemann_stream_trace
+from csgen.stream_utils import busemann_stream_trace
 from csgen.inlet_utils import inlet_blend
 from nurbskit.path import Rectangle, Ellipse
 from nurbskit.surface import BSplineSurface
@@ -34,7 +34,7 @@ T0 = atmos_interp(p0, 'Pressure', 'Temperature') # temperature [K]
 # station 1 flow conditions (free-stream compressed by 6 deg wedge)
 alpha = 6 * pi / 180                     # forebody wedge angle [rad]
 beta = beta_oblique(alpha, M0, gamma)    # forebody shock angle [rad]
-M1 = M2_oblique(beta, M0, gamma)         # Mach number
+M1 = M2_oblique(beta, alpha, M0, gamma)  # Mach number
 p1 = p2_p1_oblique(beta, M0, gamma) * p0 # static pressure [Pa]
 T1 = T2_T1_oblique(beta, M0, gamma) * T0 # temperature [K]
 
@@ -44,13 +44,13 @@ print(f'p1 = {p1:.4} Pa')
 print(f'T1 = {T1:.4} K \n')
 
 # Busemann flow field design parameters
-p3 = 50E3       # desired exit pressure [Pa]
-p3_p1 = p3/p1   # desired compression ratio
-dtheta = 0.001  # theta step size [rad]
-n_streams = 100 # number of streamlines
+p3 = 50E3             # desired exit pressure [Pa]
+p3_p1 = p3/p1         # desired compression ratio
+dtheta = 0.05*pi/180  # theta step size [rad]
+n_streams = 51        # number of streamlines
 
 # calculate Busemann flow field
-field = busemann_M1_p3p1(M1, p3_p1, gamma, dtheta)
+field = busemann_M1_p3p1(M1, p3_p1, gamma, dtheta, print_freq=200)
 
 # create plot of streamline
 fig = plt.figure(figsize=(16, 9))
@@ -60,7 +60,7 @@ plt.rcParams.update({
         "font.size": 20
         })
 ax = plt.axes()
-stream_coords = field.xyz_coords()
+stream_coords = field.raw_stream
 ax.plot(stream_coords[:,2], stream_coords[:,1], 'k-', label='Busemann Contour')
 axis_coords = np.array([[np.amin(stream_coords[:,2]), 0],
                         [np.amax(stream_coords[:,2]), 0]])
@@ -109,44 +109,13 @@ plt.axis('equal')
 plt.grid()
 plt.legend()
 plt.show()
+fig.savefig('capture_shape.svg', bbox_inches='tight')
 
 # run streamline tracer and save the surface as a VTK file
 inlet_A_coords = busemann_stream_trace(cap_coords, field, plane='capture')
-inlet_grid_A = pv.StructuredGrid(inlet_A_coords[0], inlet_A_coords[1], 
-        inlet_A_coords[2])
+inlet_grid_A = pv.StructuredGrid(inlet_A_coords[:,:,0], inlet_A_coords[:,:,1], 
+        inlet_A_coords[:,:,2])
 inlet_grid_A.save("inlet_A.vtk")
-
-# construct section of inlet that runs from cowl closure to throat
-n_z_thrt = 2
-inlet_A_thrt = np.nan * np.ones((len(inlet_A_coords[0,:,0]), n_z_thrt, 3))
-for i in range(len(inlet_A_coords[0,:,0])):
-    inlet_A_thrt[i][0] = np.array([inlet_A_coords[0,i,0], inlet_A_coords[1,i,0], 
-        inlet_A_coords[2,i,0]])
-    inlet_A_thrt[i][1] = np.array([inlet_A_coords[0,i,0], inlet_A_coords[1,i,0], 
-        np.amax(inlet_A_coords[2]) + 0.5])
-inlet_A_thrt_grid = pv.StructuredGrid(inlet_A_thrt[:,:,0], 
-    inlet_A_thrt[:,:,1], inlet_A_thrt[:,:,2])
-inlet_A_thrt_grid.save("inlet_A_throat.vtk")
-
-# save inlet_A + throat surface as VTK
-inlet_A_w_thrt_xs = np.nan * np.ones((n_streams, 
-    len(inlet_A_coords[0][0])+n_z_thrt-1))
-inlet_A_w_thrt_xs[:,:len(inlet_A_coords[0][0])] = inlet_A_coords[0]
-inlet_A_w_thrt_xs[:,len(inlet_A_coords[0][0]):] = inlet_A_thrt[:,:,0][:,1:]
-
-inlet_A_w_thrt_ys = np.nan * np.ones((n_streams, 
-    len(inlet_A_coords[1][0])+n_z_thrt-1))
-inlet_A_w_thrt_ys[:,:len(inlet_A_coords[1][0])] = inlet_A_coords[1]
-inlet_A_w_thrt_ys[:,len(inlet_A_coords[1][0]):] = inlet_A_thrt[:,:,1][:,1:]
-
-inlet_A_w_thrt_zs = np.nan * np.ones((n_streams, 
-    len(inlet_A_coords[2][0])+n_z_thrt-1))
-inlet_A_w_thrt_zs[:,:len(inlet_A_coords[2][0])] = inlet_A_coords[2]
-inlet_A_w_thrt_zs[:,len(inlet_A_coords[2][0]):] = inlet_A_thrt[:,:,2][:,1:]
-
-inlet_A_w_thrt_grid = pv.StructuredGrid(inlet_A_w_thrt_xs, inlet_A_w_thrt_ys, 
-    inlet_A_w_thrt_zs)
-inlet_A_w_thrt_grid.save("inlet_A_w_thrt.vtk")
 
 # save Busemann field as VTK file
 buse_surf = field.surface(n_streams)
@@ -195,25 +164,19 @@ plt.axis('equal')
 plt.grid()
 plt.legend()
 plt.show()
+fig.savefig('exit_shape.svg', bbox_inches='tight')
 
 # run streamline tracer and save the surface as a VTK file
 inlet_B_coords = busemann_stream_trace(exit_coords, field, plane='exit')
-inlet_grid_B = pv.StructuredGrid(inlet_B_coords[0], inlet_B_coords[1], 
-        inlet_B_coords[2])
+inlet_grid_B = pv.StructuredGrid(inlet_B_coords[:,:,0], inlet_B_coords[:,:,1], 
+        inlet_B_coords[:,:,2])
 inlet_grid_B.save("inlet_B.vtk")
 
 #------------------------------------------------------------------------------#
 #                     Generating blended inlet (inlet C)                       #
 #------------------------------------------------------------------------------#
 # blend inlets A and B, then save the surface as a VTK file
-z_cap = np.amin(inlet_A_coords[2])
-z_cowl = np.amax(inlet_B_coords[2])
-
-z_cap = min(np.amin(inlet_A_coords[2][ceil(n_streams/4)]), 
-            np.amin(inlet_A_coords[2][floor(n_streams/4)]))
-z_cowl = max(np.amax(inlet_B_coords[2][ceil(n_streams/4)]), 
-             np.amax(inlet_B_coords[2][floor(n_streams/4)]))
-inlet_C_coords = inlet_blend(inlet_A_coords, inlet_B_coords, z_cap, z_cowl, 8)
+inlet_C_coords = inlet_blend(inlet_A_coords, inlet_B_coords, 1/2.5)
 inlet_grid_C = pv.StructuredGrid(inlet_C_coords[0], inlet_C_coords[1], 
         inlet_C_coords[2])
 inlet_grid_C.save("inlet_C.vtk")

@@ -15,8 +15,6 @@ from math import pi, sqrt, tan, floor
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
-import trimesh
-import pycork
 
 # Busemann flow field design parameters
 M1 = 8.233   # entrance Mach number
@@ -115,6 +113,7 @@ z_origin = inlet_surf[:,:,2][floor(len(inlet_surf[:,:,2])/4)][-1]
 inlet_surf = rotate_x(inlet_surf, theta_attach, x_origin=1, y_origin=y_origin, 
     z_origin=z_plane)
 
+"""
 # fit b-spline surface to inlet and export as IGES
 print('\nFitting B-Spline surface to inlet.')
 p = 2
@@ -134,6 +133,7 @@ inlet_coarse = inlet_spline.list_eval(N_u=50, N_v=50)
 inlet_coarse = pv.StructuredGrid(inlet_coarse[:,:,0], inlet_coarse[:,:,1], 
     inlet_coarse[:,:,2])
 inlet_coarse.save("inlet_coarse.vtk")
+"""
 
 # save Busemann field as VTK file
 buse_surf = field.surface(n_streams)
