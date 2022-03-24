@@ -1,0 +1,40 @@
+Puffin test case: truncated Busemann diffuser
+=============================================
+Rowan Gollan, 2022-02-08
+
+This directory contains inputs to run a Puffin calculation that
+simulates the supersonic flow in a truncated Busemann diffuser.
+A truncated Busemann diffuser is one in which an ideal Busemann
+contour is truncated at a finite lip angle.
+This shortens the length of the diffuser, often greatly,
+but introduces a shock at the diffuser entrance.
+
+To exercise the test, launch the `run-bd.sh` script.
+----
+ $ ./run-bd.sh
+----
+
+= File manifest
+
+run-bd.sh ::
+  A bash run script to coordinate the complete test from prep through to post-processing.
+
+ideal-air.inp ::
+  Gas model input file to describe ideal air (gamma = 1.4)
+
+trunc-bd.py ::
+  Input file for Puffin simulator
+
+trunc-diffuser-scaled.path ::
+  (x, y) coordinates of the truncated Busemann contour (as output from Stile design tool)
+
+trunc-bd-comparison-M-contour.png ::
+  Visualisation produced with Paraview of the Mach number field. This compares calculations
+  from Puffin and Seagull.
+
+
+
+
+
+
+
