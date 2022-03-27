@@ -50,7 +50,6 @@ def enclosing_cell_centres(point, stream_data):
 	slice_ind_0 = 0
 
 	# check if x coord is within streamtube
-	print(point)
 	if point[0] < x_min or point[0] > x_max:
 		raise Exception('Point is not within the x bounds of given StreamTube.')
 	# find x coords of bounding cell centres
@@ -154,54 +153,82 @@ def integrate_stream(point_data, time_inc):
 	y_new = y_old + vel_y_old * time_inc
 	return [x_new, y_new]
 
-# read flow data
-job_name = 'trunc-bd'
-n_cells = 75 # TODO: read this from config.JSON
-current_dir = os.getcwd()
-os.chdir(current_dir + '/' + job_name)
-file_name = 'flow-0.data'
-stream_data, variable_names = read_stream_flow_file(file_name, n_cells)
+def extrapolate_stream(x_extrap, streamline_data, variable_names):
+	# extract last four x positions
+	n_points = len(streamline_data)
+	xs = np.nan * np.ones(4)
+	for i in range(4):
+		xs[i] = streamline_data[n_points-4+i][0]
+	
+	data_extrap = np.nan * np.ones(len(variable_names))
+	data_extrap[0] = x_extrap
+	# extrapolate each property at x_extrap
+	for i in range(1, len(variable_names)):
+		# extract last four values for property i
+		values = np.nan * np.ones(4)
+		for j in range(4):
+			values[j] = streamline_data[n_points-4+j][i]
+		extrap_f = interpolate.interp1d(xs, values, kind='cubic', 
+				fill_value='extrapolate')
+		data_extrap[i] = extrap_f(x_extrap)
+	return data_extrap
 
-# find indices of cell centres in stream_data the enclose locus point
-"""
-# domain corners:
-bottom_left = [0.000000e+00, 6.721933e-03]
-bottom_right = [7.256268e+00, 3.824085e-01]
-top_left = [0.000000e+00 1.001568e+00]
-top_right = [7.256268e+00, 2.566500e-03]
-"""
-locus_point = [0.000000e+00, 0.5]
-x_ind_1, y_ind_1 = enclosing_cell_centres(locus_point, stream_data)
-
-# interpolate data at locus point
-point_data = interpolate_data(x_ind_1, y_ind_1, locus_point, stream_data, 
-	variable_names)
-
-# integrate velocity to find next point on streamline
-dt = 1.0E-6
-point_i = locus_point
-point_i_data = point_data
-streamline_data = [point_data]
-step = 0
-max_step = 1000000
-while step < max_step:
-	point_i = integrate_stream(point_i_data, dt)
-	if point_i[0] >= stream_data[-1][0][0]:
-		break
-	x_ind_1, y_ind_1 = enclosing_cell_centres(point_i, stream_data)
-	point_i_data = interpolate_data(x_ind_1, y_ind_1, point_i, stream_data, 
-		variable_names)
-	streamline_data.append(point_i_data)
-	step += 1
-
-# interpolate for properties at end of streamtube
+def stream_trace(locus_point, file_name, job_name, flow_data_name, n_cells, 
+	p_buffer=1.4, dt=1.0E-6, max_step=100000):
+	# read flow data
+	# job_name = 'trunc-bd'
+	# n_cells = 75 # TODO: read this from config.JSON
+	current_dir = os.getcwd()
+	os.chdir(current_dir + '/' + job_name)
+	#flow_data_name = 'flow-0.data'
+	stream_data, variable_names = read_stream_flow_file(flow_data_name, n_cells)
 
 
-# append interpolated properties to streamline data
+	# find indices of cell centres in stream_data the enclose locus point
+	#locus_point = [0.000000e+00, 0.5]
+	x_ind_1, y_ind_1 = enclosing_cell_centres(locus_point, stream_data)
 
+	# interpolate data at locus point
+	point_data = interpolate_data(x_ind_1, y_ind_1, locus_point, stream_data, 
+								  variable_names)
 
-# write data to csv file
-with open('streamline_data.csv', 'w') as f:
-	write = csv.writer(f, delimiter=' ')
-	write.writerow(variable_names)
-	write.writerows(streamline_data)
+	# integrate velocity to find next point on streamline
+	#dt = 1.0E-6
+	point_i = locus_point
+	point_i_data = point_data
+	p0 = stream_data[0][0][6]
+	if point_i_data[6] >= p_buffer * p0:
+		streamline_data = [point_i_data]
+	else:
+		streamline_data = []
+	step = 0
+	max_x = stream_data[-1][0][0]
+	
+	while step < max_step:
+		point_i = integrate_stream(point_i_data, dt)
+		if point_i[0] >= max_x:
+			break
+		x_ind_1, y_ind_1 = enclosing_cell_centres(point_i, stream_data)
+		point_i_data = interpolate_data(x_ind_1, y_ind_1, point_i, stream_data, 
+										variable_names)
+		
+		if point_i_data[6] >= p_buffer * p0:
+			streamline_data.append(point_i_data)
+		step += 1
+
+	# interpolate for properties at end of streamtube and append to data list
+	x_extrap = max_x
+	data_extrap = extrapolate_stream(x_extrap, streamline_data, variable_names)
+	streamline_data.append(data_extrap)
+
+	"""
+	# write data to csv file
+	with open(file_name + '.csv', 'w') as f:
+		write = csv.writer(f, delimiter=' ')
+		write.writerow(variable_names)
+		write.writerows(streamline_data)
+	"""
+	# return back to working directory
+	os.chdir(current_dir)
+
+	return streamline_data
