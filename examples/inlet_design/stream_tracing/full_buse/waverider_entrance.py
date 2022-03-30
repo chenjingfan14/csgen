@@ -25,7 +25,7 @@ gamma = 1.4  # ratio of specific heats
 p3 = 50E3              # desired exit pressure [Pa]
 p3_p1 = p3/p1          # desired compression ratio
 dtheta = 0.09 * pi/180 # theta step size [rad]
-n_streams = 51        # number of streamlines
+n_streams = 51         # number of streamlines
 z_plane = 5            # z-coordinate of waverider exit plane
 theta_attach = 7.34*pi/180 # inlet attachment angle [rad]
 

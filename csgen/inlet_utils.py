@@ -39,9 +39,9 @@ def inlet_blend(inletA, inletB, alpha):
 
     for i in range(n_streams):
         # calculate list of z values for streamline i
-        z_min_i = np.amin(inletA_zs[i])
-        z_max_i = np.amax(inletB_zs[i])
-        zs_i = np.linspace(z_max_i, z_min_i, n_z)
+        zs_i = inletA_zs[i,:]
+        z_min_i = zs_i[0]
+        z_max_i = zs_i[-1]
         for j in range(n_z):
             z_ij = zs_i[j]
             inletC_zs[i][j] = z_ij

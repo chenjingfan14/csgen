@@ -21,9 +21,6 @@ T0 = atmos_interp(p0, 'Pressure', 'Temperature')
 a0 = atmos_interp(p0, 'Pressure', 'Sonic Speed')
 V0 = M0 * a0
 
-# calculate free-stream stagnation properties
-
-
 # geometric properties of conical flow field
 dtheta = 0.01*pi / 180 # integration step size (rad)
 beta = 15 * pi / 180   # angle of conical shock (rad)

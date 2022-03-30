@@ -6,7 +6,7 @@ Author: Reece Otto 23/02/2022
 """
 from csgen.busemann import busemann_M1_p3p1
 from csgen.atmosphere import atmos_interp
-from csgen.shock_relations import beta_oblique, M2_oblique, p2_p1_oblique, \
+from csgen.compressible_flow import beta_oblique, M2_oblique, p2_p1_oblique, \
                                   T2_T1_oblique
 from csgen.stream_utils import busemann_stream_trace
 from csgen.inlet_utils import inlet_blend
@@ -46,6 +46,7 @@ print(f'T1 = {T1:.4} K \n')
 # Busemann flow field design parameters
 p3 = 50E3             # desired exit pressure [Pa]
 p3_p1 = p3/p1         # desired compression ratio
+print(p3_p1)
 dtheta = 0.05*pi/180  # theta step size [rad]
 n_streams = 51        # number of streamlines
 

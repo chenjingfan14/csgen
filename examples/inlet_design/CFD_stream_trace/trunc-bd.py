@@ -4,7 +4,7 @@
 #
 
 config.axisymmetric = True
-L_ext = 0.1
+L_ext = 0.05
 
 init_gas_model('ideal-air-gas-model.lua')
 gas1 = GasState(config.gmodel)

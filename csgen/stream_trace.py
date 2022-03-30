@@ -7,6 +7,9 @@ import os
 import numpy as np
 from scipy import interpolate
 import csv
+from nurbskit.path import BSpline
+from nurbskit.spline_fitting import global_curve_interp
+from math import sqrt, sin, cos, atan2
 
 def read_stream_flow_file(file_name, n_cells):
     """
@@ -173,8 +176,20 @@ def extrapolate_stream(x_extrap, streamline_data, variable_names):
 		data_extrap[i] = extrap_f(x_extrap)
 	return data_extrap
 
-def stream_trace(locus_point, file_name, job_name, flow_data_name, n_cells, 
-	p_buffer=1.4, dt=1.0E-6, max_step=100000):
+def interpolate_pressure(p_desired, streamline_data, variable_names):
+	# extract last 2 pressure values
+	n_points = len(streamline_data)
+	ps = np.array(streamline_data)[-2:,6]
+	data_interp = np.nan * np.ones(len(variable_names))
+	for i in range(len(variable_names)):
+		# extract last 2 values for property i
+		values = np.array(streamline_data)[-2:,i]
+		extrap_f = interpolate.interp1d(ps, values)
+		data_interp[i] = extrap_f(p_desired)
+	return data_interp
+
+def stream_trace(locus_point, job_name, flow_data_name, n_cells, p_buffer=1.8, 
+	             dt=1.0E-6, max_step=100000):
 	# read flow data
 	# job_name = 'trunc-bd'
 	# n_cells = 75 # TODO: read this from config.JSON
@@ -193,16 +208,14 @@ def stream_trace(locus_point, file_name, job_name, flow_data_name, n_cells,
 								  variable_names)
 
 	# integrate velocity to find next point on streamline
-	#dt = 1.0E-6
+	p0 = stream_data[0][0][6]
+	p_shock = p_buffer * p0
 	point_i = locus_point
 	point_i_data = point_data
-	p0 = stream_data[0][0][6]
-	if point_i_data[6] >= p_buffer * p0:
-		streamline_data = [point_i_data]
-	else:
-		streamline_data = []
+	streamline_data = [point_i_data]
 	step = 0
 	max_x = stream_data[-1][0][0]
+	shock_detected = False
 	
 	while step < max_step:
 		point_i = integrate_stream(point_i_data, dt)
@@ -212,8 +225,18 @@ def stream_trace(locus_point, file_name, job_name, flow_data_name, n_cells,
 		point_i_data = interpolate_data(x_ind_1, y_ind_1, point_i, stream_data, 
 										variable_names)
 		
-		if point_i_data[6] >= p_buffer * p0:
-			streamline_data.append(point_i_data)
+		streamline_data.append(point_i_data)
+
+		# detect entrance shock wave and trim
+		if point_i_data[6] >= p_shock and shock_detected == False:
+			# interpolate streamline for desired pressure
+			point_i_data = interpolate_pressure(p_shock, streamline_data, 
+				                                variable_names)
+
+			# delete all entries in streamline_data list to trim inlet upstream
+			# of shock
+			streamline_data = [point_i_data]
+			shock_detected = True
 		step += 1
 
 	# interpolate for properties at end of streamtube and append to data list
@@ -221,14 +244,39 @@ def stream_trace(locus_point, file_name, job_name, flow_data_name, n_cells,
 	data_extrap = extrapolate_stream(x_extrap, streamline_data, variable_names)
 	streamline_data.append(data_extrap)
 
-	"""
-	# write data to csv file
-	with open(file_name + '.csv', 'w') as f:
-		write = csv.writer(f, delimiter=' ')
-		write.writerow(variable_names)
-		write.writerows(streamline_data)
-	"""
 	# return back to working directory
 	os.chdir(current_dir)
 
 	return streamline_data
+
+def inlet_stream_trace(shape_coords, n_z, job_name, flow_data_name,
+	                   n_cells, p_buffer=1.8, dt=1.0E-6, max_step=100000):
+	# trace streamlines through field and construct surface grid
+	n_streams = len(shape_coords)
+	surface_grid = np.nan * np.ones((n_streams, n_z, 3))
+	for i in range(n_streams):
+		print(f'Generating streamline {i}')
+		locus_point = [0.0, sqrt(shape_coords[i][0]**2 + shape_coords[i][1]**2)]
+		stream_i_data = stream_trace(locus_point, job_name, flow_data_name, 
+			                         n_cells, dt=dt, p_buffer=p_buffer)
+
+		# extract streamline and rotate coords
+		stream_coords = np.nan * np.ones((len(stream_i_data), 3))
+		phi = atan2(shape_coords[i][1], shape_coords[i][0])
+		for j in range(len(stream_coords)):
+			x = 0.0
+			y = np.array(stream_i_data)[j,1]
+			z = np.array(stream_i_data)[j,0]
+			stream_coords[j][0] = x*cos(phi) - y*sin(phi)
+			stream_coords[j][1] = x*sin(phi) + y*cos(phi)
+			stream_coords[j][2] = z
+	
+		# fit B-Spline to streamline
+		p = 3
+		U, P = global_curve_interp(stream_coords, p)
+		spline = BSpline(P=P, U=U, p=p)
+
+		# evaluate B-Spline for n_z points and add coords to surface grid array
+		spline_points = spline.list_eval(n_points=n_z)
+		surface_grid[i] = spline_points
+	return surface_grid
