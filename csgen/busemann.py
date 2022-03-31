@@ -136,8 +136,7 @@ class BusemannField():
         
         # save as VTK, if desired
         if save_VTK == True:
-            mc_grid = pv.StructuredGrid(mc_surf[:,:,0], mc_surf[:,:,1], 
-            mc_surf[:,:,2])
+            mc_grid = pv.StructuredGrid(mc_xs, mc_ys, mc_zs)
             mc_grid.save("mach_cone_surf.vtk")
 
         return mc_surf
@@ -157,8 +156,7 @@ class BusemannField():
         
         # save as VTK, if desired
         if save_VTK == True:
-            ts_grid = pv.StructuredGrid(ts_surf[:,:,0], ts_surf[:,:,1], 
-            ts_surf[:,:,2])
+            ts_grid = pv.StructuredGrid(ts_xs, ts_ys, ts_zs)
             ts_grid.save("term_shock_surf.vtk")
 
         return ts_surf

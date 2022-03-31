@@ -28,13 +28,3 @@ trunc-bd.py ::
 trunc-diffuser-scaled.path ::
   (x, y) coordinates of the truncated Busemann contour (as output from Stile design tool)
 
-trunc-bd-comparison-M-contour.png ::
-  Visualisation produced with Paraview of the Mach number field. This compares calculations
-  from Puffin and Seagull.
-
-
-
-
-
-
-

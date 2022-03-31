@@ -3,6 +3,7 @@ Streamline-tracing tools.
 
 Author: Reece Otto 08/11/2021
 """
+import os
 from nurbskit.path import BSpline
 from nurbskit.spline_fitting import global_curve_interp
 from nurbskit.point_inversion import point_proj_path
@@ -10,6 +11,9 @@ from math import pi, sqrt, sin, cos, tan, atan2, atan, acos
 import numpy as np
 from scipy import optimize, interpolate
 import csv
+import pyvista as pv
+import json
+import matplotlib.pyplot as plt
 
 class Streamline():
     def __init__(self, polar_coords=None, xyz_coords=None):
@@ -112,12 +116,14 @@ class Streamline():
         
         return Streamline(polar_coords=polar_coords)
 
-    def scale(self, scale_factor):
-        polar_coords = np.copy(self.polar_coords)
-        for i in range(len(polar_coords)):
-            polar_coords[i][0] = self.rs[i] * scale_factor
+    def scale(self, x_scale=1.0, y_scale=1.0, z_scale=1.0):
+        xyz_coords = np.copy(self.xyz_coords)
+        for i in range(len(xyz_coords)):
+            xyz_coords[i][0] = self.xs[i] * x_scale
+            xyz_coords[i][1] = self.ys[i] * y_scale
+            xyz_coords[i][2] = self.zs[i] * z_scale
 
-        return Streamline(polar_coords=polar_coords)
+        return Streamline(xyz_coords=xyz_coords)
 
     def translate(self, x_shift=0.0, y_shift=0.0, z_shift=0.0):
         xyz_shifted = np.copy(self.xyz_coords)
@@ -128,6 +134,9 @@ class Streamline():
             xyz_shifted[i] = [x, y, z]
         return Streamline(xyz_coords=xyz_shifted)
 
+#------------------------------------------------------------------------------#
+#               Streamline Tracing Function for Busemann Fields                #
+#------------------------------------------------------------------------------#
 def busemann_stream_trace(shape_coords, field, plane='capture'):
     if plane == 'capture':
         print('\nTracing capture shape through flow field.')
@@ -181,7 +190,10 @@ def busemann_stream_trace(shape_coords, field, plane='capture'):
     
     return inlet
 
-def waverider_stream_trace(base_coords, stream_coords, z_base, n_z, tol=1E-4):
+#------------------------------------------------------------------------------#
+#                  Streamline Tracing Function for Waveriders                  #
+#------------------------------------------------------------------------------#
+def waverider_stream_trace(design_vals):
     """
     Traces streamlines from a given base shape through a conical flow field.
 
@@ -193,6 +205,15 @@ def waverider_stream_trace(base_coords, stream_coords, z_base, n_z, tol=1E-4):
         tol: convergence tolerance for intersection between streamline and base
              shape
     """
+    # unpack dictionary
+    z_base = design_vals['z_base']
+    base_coords = design_vals['base_coords']
+    stream_coords = design_vals['stream_coords']
+    n_phi = design_vals.get('n_phi', 51)
+    n_z = design_vals.get('n_z', 51)
+    tol = design_vals.get('tol', 1.0E-5)
+    save_VTK = design_vals.get('save_VTK', False)
+
     def stream_transform(scale, point, stream):
         """
         Rotates a streamline to the phi angle of a given point, then scales the 
@@ -271,4 +292,324 @@ def waverider_stream_trace(base_coords, stream_coords, z_base, n_z, tol=1E-4):
         stream_i_coords = np.array([stream_spline(u) for u in us])
         wr_coords[i] = stream_i_coords
 
+    if save_VTK == True:
+        wr_grid = pv.StructuredGrid(wr_coords[:,:,0], wr_coords[:,:,1], 
+            wr_coords[:,:,2])
+        wr_grid.save("waverider_surf.vtk")
+
     return wr_coords
+
+#------------------------------------------------------------------------------#
+#                    Streamline Tracing Tools for Puffin                       #
+#------------------------------------------------------------------------------#
+def read_stream_flow_file(file_name, n_cells):
+    """
+    Read the flow data for a single streamtube.
+    """
+    data_file = open(file_name, "r")
+    txt = data_file.readline()
+    if txt.startswith('#'):
+        variable_names = txt.strip('# ').split()
+        #print('variable_names=', variable_names)
+        stream_data = []
+        while True:
+            slice_data = []
+            for j in range(n_cells):
+                txt = data_file.readline()
+                if txt:
+                    items = [float(item) for item in txt.strip().split()]
+                    if len(items) > 0: slice_data.append(items)
+                else:
+                    break
+            # At this point, we have the data for a full slice of cells
+            # and/or we have arrived at the end of the file.
+            if len(slice_data) == 0: break
+            stream_data.append(slice_data)
+        # At this point, we have the full stream data.
+    else:
+        print("First line of stream flow file did not start with #")
+        stream_data = None
+        variableNames = None
+    data_file.close()
+    return stream_data, variable_names
+
+def enclosing_cell_centres(point, stream_data):
+    n_x_cells = len(stream_data)
+    n_y_cells = len(stream_data[0])
+
+    # calculate x bounds of streamtube
+    x_min = stream_data[0][0][0]
+    x_max = stream_data[-1][0][0]
+    x_0 = x_min
+    slice_ind_0 = 0
+
+    # check if x coord is within streamtube
+    if point[0] < x_min or point[0] > x_max:
+        raise Exception('Point is not within the x bounds of given StreamTube.')
+    # find x coords of bounding cell centres
+    else:
+        for i in range(1, n_x_cells):
+            slice_ind_1 = i
+            x_1 = stream_data[i][0][0]
+            if point[0] >= x_0 and point[0] <= x_1:
+                break
+            else:
+                x_0 = x_1
+                slice_ind_0 = slice_ind_1
+
+    # calculate y bounds of stream at x coordinate of given point
+    y_min_left = stream_data[slice_ind_0][0][1]
+    y_max_left = stream_data[slice_ind_0][-1][1]
+    y_min_right = stream_data[slice_ind_1][0][1]
+    y_max_right = stream_data[slice_ind_1][-1][1]
+    y_min = np.interp(point[0], [x_min, x_max], [y_min_left, y_min_right])
+    y_max = np.interp(point[0], [x_min, x_max], [y_max_left, y_max_right])
+    y_A = y_min_left
+    y_D = y_min_right
+    y0_at_point = np.interp(point[1], [x_0, x_1], [y_A, y_D])
+    row_ind_0 = 0
+
+    # check if y coord is in streamtube
+    if point[1] < y_min or point[1] > y_max:
+        raise Exception('Point is not within the y bounds of given ' + \
+                        'StreamTube at the given x coordinate.')
+    # find y coords of bounding cell centres
+    else:
+        for i in range(1, n_y_cells):
+            row_ind_1 = i
+            y_B = stream_data[slice_ind_0][i][1]
+            y_C = stream_data[slice_ind_1][i][1]
+            y1_at_point = np.interp(point[1], [x_0, x_1], [y_B, y_C])
+
+            if point[1] >= y0_at_point and point[1] <= y1_at_point:
+                break
+            else:
+                y_A = y_B
+                y_D = y_C
+                row_ind_0 = row_ind_1
+    
+    return slice_ind_1, row_ind_1
+
+def interpolate_data(x_ind_1, y_ind_1, point, stream_data, variable_names):
+    """
+    Interpolates streamtube data between 4 adjacent cell centres.
+    It is assumed that the cell centres are arranged like this:
+       
+    B-----C
+    |     |
+    |     |
+    A-----D
+
+    Points A and B, as well as C and D, must share the same x coordinate.
+    All 4 y coordinates can be different.
+    """
+    # construct x-y grid
+    x_ind_0 = x_ind_1 - 1
+    y_ind_0 = y_ind_1 - 1
+
+    point_A = [stream_data[x_ind_0][y_ind_0][0], 
+               stream_data[x_ind_0][y_ind_0][1]]
+    point_D = [stream_data[x_ind_1][y_ind_0][0], 
+               stream_data[x_ind_1][y_ind_0][1]]
+    point_B = [stream_data[x_ind_0][y_ind_1][0], 
+               stream_data[x_ind_0][y_ind_1][1]]
+    point_C = [stream_data[x_ind_1][y_ind_1][0], 
+               stream_data[x_ind_1][y_ind_1][1]]
+
+    x_grid = np.array([[point_A[0], point_D[0]],
+                       [point_B[0], point_C[0]]])
+    y_grid = np.array([[point_A[1], point_D[1]],
+                       [point_B[1], point_C[1]]])
+
+    # interpolate each flow property at given point
+    point_data = np.nan * np.ones(len(variable_names))
+    for i in range(len(variable_names)):
+        data_A = stream_data[x_ind_0][y_ind_0][i]
+        data_D = stream_data[x_ind_1][y_ind_0][i]
+        data_B = stream_data[x_ind_0][y_ind_1][i]
+        data_C = stream_data[x_ind_1][y_ind_1][i]
+
+        data_grid = np.array([[data_A, data_D],
+                              [data_B, data_C]])
+
+        data_interp = interpolate.interp2d(x_grid, y_grid, data_grid)
+        point_data[i] = data_interp(point[0], point[1])
+
+    return point_data
+
+def integrate_stream(point_data, time_inc):
+    x_old = point_data[0]
+    y_old = point_data[1]
+    vel_x_old = point_data[2]
+    vel_y_old = point_data[3]
+
+    x_new = x_old + vel_x_old * time_inc
+    y_new = y_old + vel_y_old * time_inc
+    return [x_new, y_new]
+
+def extrapolate_stream(x_extrap, streamline_data, variable_names):
+    # extract last four x positions
+    n_points = len(streamline_data)
+    xs = np.nan * np.ones(4)
+    for i in range(4):
+        xs[i] = streamline_data[n_points-4+i][0]
+    
+    data_extrap = np.nan * np.ones(len(variable_names))
+    data_extrap[0] = x_extrap
+    # extrapolate each property at x_extrap
+    for i in range(1, len(variable_names)):
+        # extract last four values for property i
+        values = np.nan * np.ones(4)
+        for j in range(4):
+            values[j] = streamline_data[n_points-4+j][i]
+        extrap_f = interpolate.interp1d(xs, values, kind='cubic', 
+                fill_value='extrapolate')
+        data_extrap[i] = extrap_f(x_extrap)
+    return data_extrap
+
+def interpolate_pressure(p_desired, streamline_data, variable_names):
+    # extract last 2 pressure values
+    n_points = len(streamline_data)
+    ps = np.array(streamline_data)[-2:,6]
+    data_interp = np.nan * np.ones(len(variable_names))
+    for i in range(len(variable_names)):
+        # extract last 2 values for property i
+        values = np.array(streamline_data)[-2:,i]
+        extrap_f = interpolate.interp1d(ps, values)
+        data_interp[i] = extrap_f(p_desired)
+    return data_interp
+
+def stream_trace(locus_point, job_name, p_rat_shock=2.0, dt=1.0E-6, 
+    max_step=100000):
+    # change directory to access puffin data
+    current_dir = os.getcwd()
+    os.chdir(current_dir + '/' + job_name)
+
+    # extract number of y cells from JSON file
+    f = open('config.json')
+    config_data = json.load(f)
+    n_cells = config_data['ncells_0']
+    f.close()
+
+    # read flow data
+    flow_data_name = 'flow-0.data'
+    stream_data, variable_names = read_stream_flow_file(flow_data_name, n_cells)
+
+    # find indices of cell centres in stream_data the enclose locus point
+    x_ind_1, y_ind_1 = enclosing_cell_centres(locus_point, stream_data)
+
+    # interpolate data at locus point
+    point_data = interpolate_data(x_ind_1, y_ind_1, locus_point, stream_data, 
+                                  variable_names)
+
+    # integrate velocity to find next point on streamline
+    p0 = stream_data[0][0][6]
+    p_shock = p_rat_shock * p0
+    point_i = locus_point
+    point_i_data = point_data
+    streamline_data = [point_i_data]
+    step = 0
+    max_x = stream_data[-1][0][0]
+    shock_detected = False
+    
+    while step < max_step:
+        point_i = integrate_stream(point_i_data, dt)
+        if point_i[0] >= max_x:
+            break
+        x_ind_1, y_ind_1 = enclosing_cell_centres(point_i, stream_data)
+        point_i_data = interpolate_data(x_ind_1, y_ind_1, point_i, stream_data, 
+                                        variable_names)
+        
+        streamline_data.append(point_i_data)
+
+        # detect entrance shock wave and trim
+        if point_i_data[6] >= p_shock and shock_detected == False:
+            # interpolate streamline for desired pressure
+            point_i_data = interpolate_pressure(p_shock, streamline_data, 
+                                                variable_names)
+
+            # delete all entries in streamline_data list to trim inlet upstream
+            # of shock
+            streamline_data = [point_i_data]
+            shock_detected = True
+        step += 1
+
+    # interpolate for properties at end of streamtube and append to data list
+    x_extrap = max_x
+    data_extrap = extrapolate_stream(x_extrap, streamline_data, variable_names)
+    streamline_data.append(data_extrap)
+
+    # return back to working directory
+    os.chdir(current_dir)
+
+    return streamline_data
+
+def inlet_stream_trace(design_vals):
+    # unpack dictionary
+    job_name = design_vals['job_name']
+    shape_coords = design_vals['shape_coords']
+    n_phi = design_vals.get('n_phi', 51)
+    n_z = design_vals.get('n_z', 100)
+    p_rat_shock = design_vals.get('p_rat_shock', 2.0)
+    dt = design_vals.get('dt', 1.0E-6)
+    max_step = design_vals.get('max_step', 100000)
+    plot_shape = design_vals.get('plot_shape', False)
+    shape_label = design_vals.get('shape_label', 'Shape')
+    file_name_shape = design_vals.get('file_name_shape', 'shape')
+    save_VTK = design_vals.get('save_VTK', False)
+    file_name_VTK = design_vals.get('file_name_VTK', 'inlet')
+
+    # plot shape, if desired
+    if plot_shape == True:
+        fig = plt.figure(figsize=(16, 9))
+        plt.rcParams.update({
+            "text.usetex": True,
+            "font.family": "sans-serif",
+            "font.size": 20
+            })
+        ax = plt.axes()
+        ax.plot(shape_coords[:,0], shape_coords[:,1], 'k-', label=shape_label)
+        ax.scatter(shape_coords[:,0], shape_coords[:,1], color='black')
+        ax.set_xlabel('$x$')
+        ax.set_ylabel('$y$')
+        plt.axis('equal')
+        plt.grid()
+        plt.legend()
+        fig.savefig(file_name_shape + '.svg', bbox_inches='tight')
+
+    # trace streamlines through field and construct surface grid
+    n_streams = len(shape_coords)
+    surface_grid = np.nan * np.ones((n_phi, n_z, 3))
+    for i in range(n_phi):
+        print(f'Generating streamline {i}')
+        locus_point = [0.0, sqrt(shape_coords[i][0]**2 + shape_coords[i][1]**2)]
+        stream_i_data = stream_trace(locus_point, job_name, dt=dt, 
+            p_rat_shock=p_rat_shock)
+
+        # extract streamline and rotate coords
+        stream_coords = np.nan * np.ones((len(stream_i_data), 3))
+        phi = atan2(shape_coords[i][1], shape_coords[i][0])
+        for j in range(len(stream_coords)):
+            x = 0.0
+            y = np.array(stream_i_data)[j,1]
+            z = np.array(stream_i_data)[j,0]
+            stream_coords[j][0] = x*cos(phi) - y*sin(phi)
+            stream_coords[j][1] = x*sin(phi) + y*cos(phi)
+            stream_coords[j][2] = z
+    
+        # fit B-Spline to streamline
+        p = 3
+        U, P = global_curve_interp(stream_coords, p)
+        spline = BSpline(P=P, U=U, p=p)
+
+        # evaluate B-Spline for n_z points and add coords to surface grid array
+        spline_points = spline.list_eval(n_points=n_z)
+        surface_grid[i] = spline_points
+    
+    # save VTK file, if desired
+    if save_VTK == True:
+        inlet_grid = pv.StructuredGrid(surface_grid[:,:,0], 
+            surface_grid[:,:,1], surface_grid[:,:,2])
+        inlet_grid.save(file_name_VTK + '.vtk')
+
+    return surface_grid
