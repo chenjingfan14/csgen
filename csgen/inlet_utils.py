@@ -54,4 +54,10 @@ def inlet_blend(inletA, inletB, alpha):
             B_y_ij = inletB_ys[i][j]
             inletC_ys[i][j] = f(z_ij, A_y_ij, B_y_ij, z_min_i, z_max_i, alpha)
 
-    return [inletC_xs, inletC_ys, inletC_zs]
+    inlet_C_coords = np.nan * np.ones((n_streams, n_z, 3))
+    for i in range(n_streams):
+        for j in range(n_z):
+            inlet_C_coords[i][j] = [inletC_xs[i][j], inletC_ys[i][j], 
+                                    inletC_zs[i][j]]
+
+    return inlet_C_coords

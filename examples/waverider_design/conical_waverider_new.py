@@ -3,14 +3,16 @@ Designing a conical waverider.
 
 Author: Reece Otto 14/12/2021
 """
+from csgen.atmosphere import atmos_interp
 from csgen.conical_field import conical_M0_thetac
 from csgen.stream_utils import waverider_stream_trace
 from nurbskit.path import BSpline, Ellipse
 from nurbskit.utils import auto_knot_vector
-from math import pi, sin, cos, tan
+from math import pi, tan, cos, sin, atan2, sqrt, atan
 import numpy as np
 import matplotlib.pyplot as plt
-
+import pyvista as pv
+import csv
 
 #------------------------------------------------------------------------------#
 #                    Define Design Values and Settings                         #
@@ -116,4 +118,110 @@ wr_vals['stream_coords'] = Stream.xyz_coords
 #------------------------------------------------------------------------------#
 #                            Run Streamline Tracer                             #
 #------------------------------------------------------------------------------#
-wr_surf = waverider_stream_trace(wr_vals)
+wr_coords = waverider_stream_trace(wr_vals)
+
+#------------------------------------------------------------------------------#
+#              Evaluate pressure field across base cross-section               #
+#------------------------------------------------------------------------------#
+# calculate remaining free-stream properties from US standard atmopshere 1976
+q0 = 50E3   # dynamic pressure (Pa)
+M0 = cone_vals['M0']
+gamma = cone_vals['gamma']
+p0 = 2 * q0 / (gamma * M0*M0)                    # static pressure (Pa)
+T0 = atmos_interp(p0, 'Pressure', 'Temperature') # temperature (K)
+a0 = atmos_interp(p0, 'Pressure', 'Sonic Speed') # sonic speed (m/s)
+V0 = M0 * a0                                     # flight speed (m/s)
+
+# actual shock wave created by waverider
+wrs_coords = np.nan * np.ones(wr_coords.shape)
+n_z = wr_vals['n_z']
+for i in range(n_phi):
+    for j in range(n_z):
+        x_ij = wr_coords[i,j,0]
+        z_ij = wr_coords[i,j,2]
+        wrs_coords[i][j][0] = x_ij
+        wrs_coords[i][j][1] = -sqrt((tan(field.beta) * z_ij)**2 - x_ij**2)
+        wrs_coords[i][j][2] = z_ij
+
+# save all surfaces as VTK files
+wrs_grid = pv.StructuredGrid(wrs_coords[:,:,0], wrs_coords[:,:,1], 
+    wrs_coords[:,:,2])
+wrs_grid.save("waverider_shock.vtk")
+
+# create grid between waverider bottom surface and shock
+n_y_points = 20
+exit_mesh = np.nan * np.ones((n_phi, n_y_points, 3))
+for i in range(n_phi):
+    y_shock = wrs_coords[i,-1,1]
+    dy = (wr_coords[i,-1,1] - y_shock) / (n_y_points - 1)
+    for j in range(n_y_points):
+        exit_mesh[i][j][0] = wr_coords[i,-1,0]
+        exit_mesh[i][j][1] = y_shock + j * dy
+        exit_mesh[i][j][2] = z_base
+exit_grid = pv.StructuredGrid(exit_mesh[:,:,0], exit_mesh[:,:,1], 
+    exit_mesh[:,:,2])
+exit_grid.save("exit_grid.vtk")
+
+# evaluate pressure at each grid point
+exit_theta = np.nan * np.ones((n_phi, n_y_points))
+exit_delta = np.nan * np.ones((n_phi, n_y_points))
+exit_mach = np.nan * np.ones((n_phi, n_y_points))
+exit_pressure = np.nan * np.ones((n_phi, n_y_points))
+exit_temp = np.nan * np.ones((n_phi, n_y_points))
+exit_theta = np.nan * np.ones((n_phi, n_y_points))
+print('\nEvaluating flow field at exit plane.\n')
+for i in range(n_phi):
+    for j in range(n_y_points):
+        x_ij = exit_mesh[i][j][0]
+        y_ij = exit_mesh[i][j][1]
+        z_ij = exit_mesh[i][j][2]
+
+        # calculate theta but make slightly lower to ensure in valid range
+        theta_ij = atan(sqrt(x_ij**2 + y_ij**2) / z_ij) - 1E-6
+        exit_theta[i][j] = theta_ij
+        exit_theta[i][j] = theta_ij
+        exit_mach[i][j] = field.M(theta_ij)
+        exit_delta[i][j] = atan(field.v(theta_ij) / field.u(theta_ij))
+        exit_pressure[i][j] = field.p(theta_ij, p0)
+        exit_temp[i][j] = field.T(theta_ij, T0)
+
+max_p_ind = np.argmax(exit_pressure)
+theta_attach = exit_theta.flatten()[max_p_ind]
+
+# calculate average properties over plane
+print(f'Inlet attachment angle: {theta_attach*180/pi:.4} deg')
+print(f"""Average flow properties over exit plane:
+Theta = {np.average(exit_theta)*180/pi:.4} deg
+Flow angle = {np.average(exit_delta)*180/pi:.4} deg
+Mach number = {np.average(exit_mach):.4}
+Pressure = {np.average(exit_pressure):.4} Pa
+Temperature = {np.average(exit_temp):.4} K
+""")
+
+# plot pressure field at z=z_base
+plt.figure(figsize=(16, 9))
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.size": 20
+    })
+ax = plt.axes()
+plt.grid()
+ax.plot(wr_coords[:,-1,0], wr_coords[:,-1,1], 'k')
+ax.plot(wrs_coords[:,-1,0], wrs_coords[:,-1,1], 'k')
+plt.contourf(exit_mesh[:,:,0], exit_mesh[:,:,1], exit_pressure, 100)
+cbar = plt.colorbar()
+cbar.set_label('Pressure (Pa)', rotation=90)
+ax.set_xlabel('$x$')
+ax.set_ylabel('$y$')
+plt.axis('equal')
+plt.savefig('exit_pressure.svg', bbox_inches='tight')
+
+# save exit cross-section as CSV file
+with open('exit_shape.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=' ')
+    for i in range(len(wr_coords)):
+        writer.writerow([wr_coords[i,-1,0], wr_coords[i,-1,1]])
+    for j in range(1, len(wrs_coords)):
+        writer.writerow([wrs_coords[len(wrs_coords)-j-1,-1,0], 
+            wrs_coords[len(wrs_coords)-j-1,-1,1]])

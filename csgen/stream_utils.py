@@ -113,7 +113,6 @@ class Streamline():
             for i in range(len(polar_coords)):
                 polar_coords[i] = [rs[i], thetas[i], phis[i]]
 
-        
         return Streamline(polar_coords=polar_coords)
 
     def scale(self, x_scale=1.0, y_scale=1.0, z_scale=1.0):
@@ -588,7 +587,7 @@ def inlet_stream_trace(design_vals):
 
         # extract streamline and rotate coords
         stream_coords = np.nan * np.ones((len(stream_i_data), 3))
-        phi = atan2(shape_coords[i][1], shape_coords[i][0])
+        phi = atan2(shape_coords[i][1], shape_coords[i][0]) - pi/2
         for j in range(len(stream_coords)):
             x = 0.0
             y = np.array(stream_i_data)[j,1]
