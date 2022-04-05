@@ -195,13 +195,13 @@ class ConicalField():
 
         if show_shock == True:
             shock_coords = np.array([[0, 0],
-                                     [max_z, max_z * tan(self.beta)]])
+                                     [max_z, -max_z * tan(self.beta)]])
             ax.plot(shock_coords[:,0], shock_coords[:,1], 'r-', 
                 label='Shockwave')
     
         if show_cone == True:
             cone_coords = np.array([[0, 0],
-                                    [max_z, max_z * tan(self.thetac)]])
+                                    [max_z, -max_z * tan(self.thetac)]])
             ax.plot(cone_coords[:,0], cone_coords[:,1], 'k-', label='Cone')
 
         ax.set_xlabel('$z$')

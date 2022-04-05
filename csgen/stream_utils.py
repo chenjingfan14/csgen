@@ -479,7 +479,7 @@ def interpolate_pressure(p_desired, streamline_data, variable_names):
     return data_interp
 
 def stream_trace(locus_point, job_name, p_rat_shock=2.0, dt=1.0E-6, 
-    max_step=100000):
+    shock_data_only=False, max_step=100000):
     # change directory to access puffin data
     current_dir = os.getcwd()
     os.chdir(current_dir + '/' + job_name)
@@ -531,12 +531,16 @@ def stream_trace(locus_point, job_name, p_rat_shock=2.0, dt=1.0E-6,
             # of shock
             streamline_data = [point_i_data]
             shock_detected = True
+            if shock_data_only == True:
+                break
         step += 1
 
     # interpolate for properties at end of streamtube and append to data list
-    x_extrap = max_x
-    data_extrap = extrapolate_stream(x_extrap, streamline_data, variable_names)
-    streamline_data.append(data_extrap)
+    if shock_data_only == False:
+        x_extrap = max_x
+        data_extrap = extrapolate_stream(x_extrap, streamline_data, 
+            variable_names)
+        streamline_data.append(data_extrap)
 
     # return back to working directory
     os.chdir(current_dir)
@@ -545,6 +549,7 @@ def stream_trace(locus_point, job_name, p_rat_shock=2.0, dt=1.0E-6,
 
 def inlet_stream_trace(design_vals):
     # unpack dictionary
+    puffin_dir = design_vals['puffin_dir']
     job_name = design_vals['job_name']
     shape_coords = design_vals['shape_coords']
     n_phi = design_vals.get('n_phi', 51)
@@ -577,13 +582,15 @@ def inlet_stream_trace(design_vals):
         fig.savefig(file_name_shape + '.svg', bbox_inches='tight')
 
     # trace streamlines through field and construct surface grid
+    working_dir = os.getcwd()
+    os.chdir(puffin_dir)
     n_streams = len(shape_coords)
     surface_grid = np.nan * np.ones((n_phi, n_z, 3))
     for i in range(n_phi):
         print(f'Generating streamline {i}')
         locus_point = [0.0, sqrt(shape_coords[i][0]**2 + shape_coords[i][1]**2)]
         stream_i_data = stream_trace(locus_point, job_name, dt=dt, 
-            p_rat_shock=p_rat_shock)
+            p_rat_shock=p_rat_shock, max_step=max_step)
 
         # extract streamline and rotate coords
         stream_coords = np.nan * np.ones((len(stream_i_data), 3))
@@ -605,10 +612,72 @@ def inlet_stream_trace(design_vals):
         spline_points = spline.list_eval(n_points=n_z)
         surface_grid[i] = spline_points
     
+    os.chdir(working_dir)
+
     # save VTK file, if desired
     if save_VTK == True:
         inlet_grid = pv.StructuredGrid(surface_grid[:,:,0], 
             surface_grid[:,:,1], surface_grid[:,:,2])
         inlet_grid.save(file_name_VTK + '.vtk')
 
+    return surface_grid
+
+def shock_surface(design_vals):
+    puffin_dir = design_vals['puffin_dir']
+    job_name = design_vals['job_name']
+    n_r = design_vals.get('n_r', 20)
+    n_phi = design_vals.get('n_phi', 20)
+    p_rat_shock = design_vals.get('p_rat_shock', 2.0)
+    dt = design_vals.get('dt', 1.0E-6)
+    max_step = design_vals.get('max_step', 100000)
+
+    # change directory to access puffin data
+    current_dir = os.getcwd()
+    os.chdir(puffin_dir + '/' + job_name)
+
+    # extract number of y cells from JSON file
+    f = open('config.json')
+    config_data = json.load(f)
+    n_cells = config_data['ncells_0']
+    f.close()
+
+    # read flow data
+    flow_data_name = 'flow-0.data'
+    stream_data, variable_names = read_stream_flow_file(flow_data_name, n_cells)
+    max_y = stream_data[0][-1][1]
+    dy = max_y - stream_data[0][-2][1]
+
+    # return back to working directory
+    os.chdir(puffin_dir)
+
+    # calculate r and phi values
+    rs = np.linspace(0+dy, max_y-dy, n_r)
+    phis = np.linspace(pi, 2*pi, n_phi)
+    surface_grid = np.nan * np.ones((n_phi, n_r, 3))
+    shock_coords = np.nan * np.ones((n_r, 3))
+    for j in range(n_r):
+        locus_point = [0.0, rs[j]]
+        stream_i_data = stream_trace(locus_point, job_name, 
+                p_rat_shock=p_rat_shock, dt=dt, shock_data_only=True, 
+                max_step=max_step)[0]
+        shock_coords[j][0] = 0.0
+        shock_coords[j][1] = stream_i_data[1]
+        shock_coords[j][2] = stream_i_data[0]
+    
+    for i in range(n_phi):
+        for j in range(n_r):
+            x = shock_coords[j][0]
+            y = shock_coords[j][1]
+            z = shock_coords[j][2]
+
+            surface_grid[i][j][0] = x*cos(phis[i]) - y*sin(phis[i])
+            surface_grid[i][j][1] = x*sin(phis[i]) + y*cos(phis[i])
+            surface_grid[i][j][2] = z
+
+    os.chdir(current_dir)
+    """
+    surface_grid = pv.StructuredGrid(surface_grid[:,:,0], surface_grid[:,:,1], 
+        surface_grid[:,:,2])
+    surface_grid.save('inlet_shock.vtk')
+    """
     return surface_grid
