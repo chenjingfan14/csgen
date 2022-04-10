@@ -4,8 +4,10 @@ Designing a conical waverider.
 Author: Reece Otto 14/12/2021
 """
 import os
-from csgen.atmosphere import atmos_interp
+import json
 from csgen.conical_field import conical_M0_beta
+from csgen.atmosphere import atmos_interp
+
 from csgen.stream_utils import waverider_stream_trace
 from csgen.waverider_utils import top_surface
 from nurbskit.path import BSpline, Ellipse
@@ -17,60 +19,31 @@ import pyvista as pv
 import csv
 
 #------------------------------------------------------------------------------#
-#                    Define Design Values and Settings                         #
-#------------------------------------------------------------------------------#
-# design values for conical field and streamline
-cone_vals = {
-    'M0': 12,            # free-stream Mach number
-    'beta': 10.5*pi/180, # shock angle [rad]
-    'gamma': 1.4,        # ratio of specific heats
-    'L_field': 10,       # length of conical field when tracing streamline
-    'r0': 1              # initial radius of streamline
-}
-
-# integration settings
-settings = {
-    'dtheta': 0.01*pi/180, # integration step size for theta [rad]
-    'max_steps': 10000,    # maximum number of integration steps
-    'print_freq': 20,      # printing frequency of integration info
-    'verbosity': 1         # verbosity level
-}
-
-# settings for streamline tracing
-wr_vals = {
-	'z_base': 5,     # z location of waverider base
-	'n_phi': 51,     # number of points in phi direction
-	'n_z': 51,       # number of points in z direction
-	'tol': 1.0E-4,   # tolerance for streamline-finding algorithm
-	'save_VTK': True # option to save surface as VTK file
-}
-
-# establish working directory
-main_dir = os.getcwd()
-working_dir = main_dir + '/waverider'
-if not os.path.exists(working_dir):
-    os.makedirs(working_dir)
-os.chdir(working_dir)
-#------------------------------------------------------------------------------#
 #                         Generate Conical Flow Field                          #
 #------------------------------------------------------------------------------#
-# generate flow field and streamline
-field = conical_M0_beta(cone_vals, settings)
-Stream = field.Streamline(cone_vals, settings)
+# import waverider design values
+main_dir = os.getcwd()
+waverider_dir = main_dir + '/waverider'
+os.chdir(waverider_dir)
+f = open('waverider_vals.json')
+waverider_vals = json.load(f)
+f.close()
 
-# negate y-coords of streamline
+# generate flow field and streamline, then plot
+field = conical_M0_beta(waverider_vals['cone_vals'], waverider_vals['settings'])
+Stream = field.Streamline(waverider_vals['cone_vals'], 
+    waverider_vals['settings'])
 Stream = Stream.scale(y_scale=-1)
-
-# generate plot
 field.plot(Stream)
 
-# generate surfaces
+# generate cone and shock surfaces
 field.cone_surface(cone_vals['L_field'])
 field.shock_surface(cone_vals['L_field'])
 
 #------------------------------------------------------------------------------#
 #               Define Cross-Sectional Shape of Waverider Base                 #
 #------------------------------------------------------------------------------#
+# TODO: is this worthy of its own python file?
 # extract design information from settings dictionary
 z_base = wr_vals['z_base']
 n_phi = wr_vals['n_phi']
@@ -143,14 +116,13 @@ top_surface = top_surface(wr_top_coords, wr_coords)
 #------------------------------------------------------------------------------#
 #              Evaluate pressure field across base cross-section               #
 #------------------------------------------------------------------------------#
+# TODO: create mesh evaluation routine and call it here
 # calculate remaining free-stream properties from US standard atmopshere 1976
 q0 = 50E3   # dynamic pressure (Pa)
 M0 = cone_vals['M0']
 gamma = cone_vals['gamma']
 p0 = 2 * q0 / (gamma * M0*M0)                    # static pressure (Pa)
-T0 = atmos_interp(p0, 'Pressure', 'Temperature') # temperature (K)
-a0 = atmos_interp(p0, 'Pressure', 'Sonic Speed') # sonic speed (m/s)
-V0 = M0 * a0                                     # flight speed (m/s)
+T0 = atmos_interp(p0, 'Pressure', 'Temperature') # temperature (K)                                  # flight speed (m/s)
 
 # actual shock wave created by waverider
 wrs_coords = np.nan * np.ones(wr_coords.shape)
@@ -216,6 +188,12 @@ outflow = {
     'T': np.average(exit_temp)
 }
 
+attach = {
+    'y_attach': y_attach,
+    'z_attach': z_base,
+    'alpha_attach': theta_attach
+}
+
 print(f'Inlet attachment coords: [0.0, {y_attach}, {z_base}]')
 print(f'Inlet attachment angle: {theta_attach*180/pi:.4} deg')
 print(f"""Average flow properties over exit plane:
@@ -263,12 +241,14 @@ with open('exit_shape.csv', 'w', newline='') as csvfile:
         writer.writerow([wrs_coords[len(wrs_coords)-j-1,-1,0], 
             wrs_coords[len(wrs_coords)-j-1,-1,1]])
 
-# create directory for diffuser simulation
-os.chdir(main_dir)
+# export inflow values for diffuser simulation
 diffuser_dir = main_dir + '/diffuser'
-if not os.path.exists(diffuser_dir):
-    os.makedirs(diffuser_dir)
 os.chdir(diffuser_dir)
-import json
 with open('inflow.json', 'w') as f:
   json.dump(outflow, f, ensure_ascii=False, indent=2)
+
+# export attachment values for inlet design
+inlet_dir = main_dir + '/inlet'
+os.chdir(inlet_dir)
+with open('attach.json', 'w') as f:
+  json.dump(attach, f, ensure_ascii=False, indent=2)

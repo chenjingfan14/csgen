@@ -56,3 +56,5 @@ field.plot(file_name='trunc_buse', show_mach_wave=False, show_exit_shock=False)
 
 # save csv of streamline
 field.Streamline.save_to_csv('trunc_buse')
+
+# TODO: generate puffin scripts

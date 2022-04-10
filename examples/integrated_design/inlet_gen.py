@@ -126,8 +126,8 @@ inlet_C_coords = inlet_blend(inlet_A_coords, inlet_B_coords, 2.5)
 
 
 
-angle_attach = 8.577*pi/180
-y_fb = -0.7540991408622034
+angle_attach = 8.68*pi/180
+y_fb = -0.7633088983314207
 z_fb = 5.0
 
 y_inlet = inlet_C_coords[floor(len(inlet_C_coords)/4),0,1]
