@@ -20,16 +20,16 @@ q0 = 50E3
 p0 = 2*q0 / (gamma*M0*M0)                        
 T0 = atmos_interp(p0, 'Pressure', 'Temperature') 
 
-free_stream = {
-    'rat_spec_heats': gamma, # ratio of specific heats
-    'mach_no': M0,           # Mach number
-    'dynam_press': q0,       # dynamic pressure [Pa]
-    'press': p0,             # static pressure [Pa]
-    'temp': T0,              # temperature [K]
-}
-
 # define parameters for conical waverider
 waverider_vals = {
+    # free-stream conditions
+    'free_stream': {
+        'rat_spec_heats': gamma, # ratio of specific heats
+        'mach_no': M0,           # Mach number
+        'dynam_press': q0,       # dynamic pressure [Pa]
+        'press': p0,             # static pressure [Pa]
+        'temp': T0,              # temperature [K]
+    },
     # parameters to generate conical flow field
     'cone_vals': {
         'mach_no': M0,              # free-stream Mach number
@@ -41,6 +41,7 @@ waverider_vals = {
     # Taylor-Maccoll and streamline integration settings 
     'cone_settings': {
         'theta_step': 0.01*pi/180, # integration step size [rad]
+        'interp_sing': True,       # option to interpolate at singularity
         'max_steps': 10000,        # maximum number of integration steps
         'print_freq': 20,          # printing frequency of integration info
         'verbosity': 1             # verbosity level
@@ -58,7 +59,6 @@ waverider_vals = {
 #------------------------------------------------------------------------------#
 #                                 Diffuser                                     #
 #------------------------------------------------------------------------------#
-
 # define parameters for truncated Busemann diffuser
 diffuser_vals = {
     # parameters to generate truncated Busemann diffuser
@@ -102,23 +102,27 @@ inlet_vals = {
 #------------------------------------------------------------------------------#
 #                                 File Export                                  #
 #------------------------------------------------------------------------------#
-# save waverider dictionaries
+# create all required directories
 main_dir = os.getcwd()
 waverider_dir = main_dir + '/waverider'
+diffuser_dir = main_dir + '/diffuser'
+inlet_dir = main_dir + '/inlet'
+directs = [waverider_dir, diffuser_dir, inlet_dir]
+for direct in directs:
+    if not os.path.exists(direct):
+        os.mkdir(direct)
+
+# save waverider dictionary
 os.chdir(waverider_dir)
-with open('free_stream.json', 'w') as f:
-    json.dump(free_stream, f, ensure_ascii=False, indent=2)
 with open('waverider_vals.json', 'w') as f:
     json.dump(waverider_vals, f, ensure_ascii=False, indent=2)
 
 # save diffuser dictionary
-diffuser_dir = main_dir + '/diffuser'
 os.chdir(diffuser_dir)
 with open('diffuser_vals.json', 'w') as f:
     json.dump(diffuser_vals, f, ensure_ascii=False, indent=2)
 
 # save inlet dictionary
-inlet_dir = main_dir + '/inlet'
 os.chdir(inlet_dir)
 with open('inlet_vals.json', 'w') as f:
     json.dump(inlet_vals, f, ensure_ascii=False, indent=2)

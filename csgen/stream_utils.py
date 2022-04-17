@@ -192,7 +192,7 @@ def busemann_stream_trace(shape_coords, field, plane='capture'):
 #------------------------------------------------------------------------------#
 #                  Streamline Tracing Function for Waveriders                  #
 #------------------------------------------------------------------------------#
-def waverider_stream_trace(design_vals):
+def waverider_stream_trace(design_vals, base_coords, stream_coords):
     """
     Traces streamlines from a given base shape through a conical flow field.
 
@@ -206,8 +206,6 @@ def waverider_stream_trace(design_vals):
     """
     # unpack dictionary
     z_base = design_vals['z_base']
-    base_coords = design_vals['base_coords']
-    stream_coords = design_vals['stream_coords']
     n_phi = design_vals.get('n_phi', 51)
     n_z = design_vals.get('n_z', 51)
     tol = design_vals.get('tol', 1.0E-5)
@@ -268,7 +266,6 @@ def waverider_stream_trace(design_vals):
 
         return np.linalg.norm(point - curve_point)
 
-    print('\nRunning streamline tracer.')
     wr_coords = np.nan * np.ones((len(base_coords), n_z, 3))
     for i in range(len(base_coords)):
         # extract point i of waverider base shape

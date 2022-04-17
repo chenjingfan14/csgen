@@ -350,8 +350,8 @@ def busemann_M1_p3p1(design_vals, settings):
     # unpack dictionaries
     M1 = design_vals['M1']
     p3_p1 = design_vals['p3_p1']
-    r0 = design_vals.get('r0', 1.0)
-    gamma = design_vals.get('gamma', 1.4)
+    r0 = design_vals.get('init_radius', 1.0)
+    gamma = design_vals.get('rat_spec_heats', 1.4)
 
     dtheta = settings.get('dtheta', 0.05*pi/180)
     M2_guess = settings.get('M2_guess', 5.768)

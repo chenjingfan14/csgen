@@ -14,36 +14,23 @@ import json
 main_dir = os.getcwd()
 working_dir = main_dir + '/diffuser'
 os.chdir(working_dir)
-f = open('inflow.json')
-inflow_data = json.load(f)
+f = open('diffuser_vals.json')
+diffuser_vals = json.load(f)
 f.close()
-
-# Busemann field design parameters
-design_vals = {
-    'M1': inflow_data['M'],           # Mach number at station 2
-    'p3_p1': 50E3 / inflow_data['p'], # angle of terminating shock [rad]
-    'gamma': 1.4,                     # ratio of specific heats
-    'r0': 1                           # initial radius
-}
-
-# integration settings for Taylor-Maccoll equations
-settings = {
-    'dtheta': 0.05*pi/180, # theta step size [rad]
-    'beta2_guess': 0.2088, # initial guess for beta2 [rad]
-    'M2_guess': 5.912,     # initial guess for M2
-    'max_steps': 10000,    # maximum number of integration steps
-    'print_freq': 500,     # printing frequency of integration info
-    'interp_sing': True,   # interpolate for Taylor-Macoll singularity
-    'verbosity': 1         # verbosity level
-}
+buse_vals = diffuser_vals['buse_vals']
+buse_settings = diffuser_vals['buse_settings']
+inflow_data = diffuser_vals['inflow_data']
 
 # generate Busemann field
-field = busemann_M1_p3p1(design_vals, settings)
+buse_vals['M1'] = inflow_data['mach_no']
+buse_vals['p3_p1'] = buse_vals['p_exit'] / inflow_data['press']
+field = busemann_M1_p3p1(buse_vals, buse_settings)
 
 # truncate contour
-field.Streamline = field.Streamline.truncate(trunc_angle=8*pi/180)
+field.Streamline = field.Streamline.truncate(
+    trunc_angle=buse_vals['trunc_angle'])
 
-# scale so to accommodate capture shape
+# scale to accommodate capture shape
 scaler = 1.6
 field.Streamline = field.Streamline.scale(scaler, scaler, scaler)
 

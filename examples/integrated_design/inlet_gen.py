@@ -14,6 +14,7 @@ import numpy as np
 from math import floor, pi
 from scipy import interpolate, optimize
 import os
+import json
 
 #------------------------------------------------------------------------------#
 #                         Inlet defined by capture shape                       #
@@ -36,8 +37,6 @@ n_phi = len(cap_coords)
 
 working_dir = main_dir + '/inlet'
 puffin_dir = main_dir + '/diffuser'
-if not os.path.exists(working_dir):
-    os.makedirs(working_dir)
 os.chdir(working_dir)
 
 inlet_A_vals = {
@@ -124,11 +123,13 @@ inlet_B_coords = inlet_stream_trace(inlet_B_vals)
 inlet_C_coords = inlet_blend(inlet_A_coords, inlet_B_coords, 2.5)
 
 
+f = open('attach.json')
+attach_vals = json.load(f)
+f.close()
 
-
-angle_attach = 8.68*pi/180
-y_fb = -0.7633088983314207
-z_fb = 5.0
+angle_attach = attach_vals['attach_angle']
+y_fb = attach_vals['y_attach']
+z_fb = attach_vals['z_attach']
 
 y_inlet = inlet_C_coords[floor(len(inlet_C_coords)/4),0,1]
 z_inlet = inlet_C_coords[floor(len(inlet_C_coords)/4),0,2]
@@ -172,3 +173,29 @@ shock_surf = rotate_x(shock_surf, angle=angle_attach, x_origin=1.0,
 shock_grid = pv.StructuredGrid(shock_surf[:,:,0], shock_surf[:,:,1], 
         shock_surf[:,:,2])
 shock_grid.save("inlet_shock.vtk")
+
+
+
+
+"""
+ATTEMPTING INTERSECTION ALGORITHM HERE
+ideas: 
+ 1 - create a curve in region of intersection and run point projection
+     algorithm for each point on the curve
+"""
+
+from nurbskit.surface import BSplineSurface
+from nurbskit.spline_fitting import global_surf_interp
+os.chdir(main_dir + '/waverider')
+wr_trim = np.reshape(pv.read('wr_trim.vtk').points, (49, 51, 3))
+os.chdir(working_dir)
+
+
+p = 3
+q = 3
+U, V, P = global_surf_interp(wr_trim, p, q)
+wr_patch = BSplineSurface(p=p, q=q, U=U, V=V, P=P)
+
+U, V, P = global_surf_interp(shock_surf, p, q)
+shock_patch = BSplineSurface(p=p, q=q, U=U, V=V, P=P)
+

@@ -1,8 +1,9 @@
 import json
+from eilmer.spline import CubicSpline
 
 # read inflow parameters from json file
-f = open('inflow.json')
-inflow_data = json.load(f)
+f = open('diffuser_vals.json')
+diffuser_vals = json.load(f)
 f.close()
 
 config.axisymmetric = True
@@ -10,11 +11,11 @@ L_ext = 0.05
 
 init_gas_model('ideal-air-gas-model.lua')
 gas1 = GasState(config.gmodel)
-gas1.p = inflow_data['p']
-gas1.T = inflow_data['T']
+gas1.p = diffuser_vals['inflow_data']['press']
+gas1.T = diffuser_vals['inflow_data']['temp']
 gas1.update_thermo_from_pT()
 gas1.update_sound_speed()
-M1 = inflow_data['M']
+M1 = diffuser_vals['inflow_data']['mach_no']
 V1 = M1 * gas1.a
 
 config.max_step_relax = 40
@@ -31,7 +32,6 @@ with open('trunc_buse.csv', 'r') as df:
 x_thrt = xs[-1]
 y_thrt = ys[-1]
 
-from eilmer.spline import CubicSpline
 busemann_contour = CubicSpline(xs, ys)
 def upper_y(x):
     return busemann_contour(x) if x < x_thrt else y_thrt
@@ -46,5 +46,3 @@ st1 = StreamTube(gas=gas1, velx=V1, vely=0.0,
                  y0=lower_y, y1=upper_y,
                  bc0=lower_bc, bc1=upper_bc,
                  ncells=75)
-
-

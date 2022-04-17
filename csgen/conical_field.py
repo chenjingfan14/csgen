@@ -119,8 +119,8 @@ class ConicalField():
 
     def Streamline(self, design_vals, settings):
         # unpack dictionaries
-        L_field = design_vals['L_field']
-        r0 = design_vals.get('r0', 1.0)
+        L_field = design_vals['field_len']
+        r0 = design_vals.get('init_radius', 1.0)
 
         max_steps = settings.get('max_steps', 10000)
         print_freq = settings.get('print_freq', 10)
@@ -140,7 +140,7 @@ class ConicalField():
 
         # begin integration
         if verbosity == 1:
-            print('Integrating streamline equation. \n')
+            print('Integrating streamline equation.')
         global i
         i = 0
         while r.successful() and i < len(self.thetas)-1 and \
@@ -153,7 +153,8 @@ class ConicalField():
                 print(str_1 + str_2 + str_3)
             rs.append(r.y[0])
             i += 1
-
+        print()
+        
         # calculate Cartesian coordinates of streamline
         coords = np.nan * np.ones((len(rs), 3))
         for i in range(len(rs)):
@@ -257,11 +258,11 @@ class ConicalField():
 
 def conical_M0_beta(design_vals, settings):
     # unpack dictionaries
-    M0 = design_vals['M0']
-    beta = design_vals['beta']
-    gamma = design_vals.get('gamma', 1.4)
+    M0 = design_vals['mach_no']
+    beta = design_vals['shock_angle']
+    gamma = design_vals.get('rat_spec_heats', 1.4)
 
-    dtheta = settings.get('dtheta', 0.01*pi/180)
+    dtheta = settings.get('theta_step', 0.01*pi/180)
     max_steps = settings.get('max_steps', 10000)
     interp_sing = settings.get('interp_sing', True)
     print_freq = settings.get('print_freq', 10)
@@ -293,7 +294,7 @@ def conical_M0_beta(design_vals, settings):
 
     # begin integration
     if verbosity == 1:
-        print('Integrating Taylor-Maccoll equations. \n')
+        print('Integrating Taylor-Maccoll equations.')
     i = 0
     while r.successful() and r.y[1] < 0:
         r.integrate(r.t - dt)
@@ -345,7 +346,7 @@ def conical_M0_beta(design_vals, settings):
         
         print(f'Solution at final step:')
         print(f'theta = {thetas[-1] * 180/pi:.4} deg, u = {us[-1]:.4}, ' + \
-            f'v = {vs[-1]:.4}')
+            f'v = {vs[-1]:.4}\n')
 
     # return conical flow field object
     field = ConicalField(thetas, us, vs, M0, beta, thetas[-1], gamma)
