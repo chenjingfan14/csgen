@@ -49,8 +49,8 @@ waverider_vals = {
     # waverider surface parameters
     'surf_vals': {
         'z_base': 5.0,   # z location of waverider base
-        'n_phi': 51,     # number of phi points
-        'n_z': 51,       # number of z points
+        'n_phi': 51,    # number of phi points
+        'n_z': 50,      # number of z points
         'tol': 1.0E-4,   # tolerance for streamline-finding algorithm
         'save_VTK': True # save surface as VTK file
     }

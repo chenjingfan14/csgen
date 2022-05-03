@@ -12,6 +12,7 @@ from nurbskit.path import BSpline, Ellipse
 from nurbskit.utils import auto_knot_vector
 from math import pi, tan, cos, sin, atan2, sqrt, atan
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import pyvista as pv
 import csv
@@ -90,17 +91,23 @@ plt.rcParams.update({
         "font.family": "sans-serif",
         "font.size": 20
         })
+matplotlib.rc('text', usetex=True)
+matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]
+
 ax = plt.axes()
-ax.plot(wr_base_coords[:,0], wr_base_coords[:,1], 'b', label='Waverider Base')
+ax.plot(wr_base_coords[:,0], wr_base_coords[:,1], 'b', 
+    label=r'Base Contour $\boldsymbol{C}_{\text{base}}(u)$')
 ax.plot(wr_top_coords[:,0], wr_top_coords[:,1], 'b')
 ax.plot(cone_base_coords[:,0], cone_base_coords[:,1], 'k', 
-	label='Base Cone')
-ax.plot(shock_base_coords[:,0], shock_base_coords[:,1], 'r', label='Shockwave')
+	label='Cone Surface')
+ax.plot(shock_base_coords[:,0], shock_base_coords[:,1], 'r', 
+    label='Shockwave Surface')
 ax.set_xlabel('$x$')
 ax.set_ylabel('$y$')
-plt.axis('equal')
+
+plt.axis('square')
 plt.grid()
-plt.legend()
+plt.legend(bbox_to_anchor=[1.0, 1.0])
 plt.savefig('waverider_base.svg', bbox_inches='tight')
 
 #------------------------------------------------------------------------------#
@@ -176,15 +183,20 @@ plt.figure(figsize=(16, 9))
 plt.rcParams.update({
     "text.usetex": True,
     "font.family": "sans-serif",
-    "font.size": 20
+    "font.size": 30
     })
 ax = plt.axes()
-plt.grid()
-ax.plot(wr_coords[:,-1,0], wr_coords[:,-1,1], 'k')
-ax.plot(wrs_coords[:,-1,0], wrs_coords[:,-1,1], 'k')
-plt.contourf(exit_mesh[:,:,0], exit_mesh[:,:,1], exit_data[:,:,6], 100)
+#plt.grid()
+ax.plot(wr_coords[:,-1,0], wr_coords[:,-1,1], 'k', zorder=6)
+ax.plot(wrs_coords[:,-1,0], wrs_coords[:,-1,1], 'k', zorder=6)
+cnt = plt.contourf(exit_mesh[:,:,0], exit_mesh[:,:,1], exit_data[:,:,6], 100, zorder=5)
+for c in cnt.collections:
+    c.set_edgecolor("face")
 cbar = plt.colorbar()
 cbar.set_label('Pressure (Pa)', rotation=90)
+cbar.ax.get_yaxis().labelpad = 30
+ax.xaxis.grid(True, zorder=0)
+ax.yaxis.grid(True, zorder=0)
 ax.set_xlabel('$x$')
 ax.set_ylabel('$y$')
 plt.axis('equal')

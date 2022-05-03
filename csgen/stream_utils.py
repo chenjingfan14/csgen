@@ -649,7 +649,7 @@ def shock_surface(design_vals):
 
     # calculate r and phi values
     rs = np.linspace(0+dy, max_y-dy, n_r)
-    phis = np.linspace(pi, 3*pi, n_phi)
+    phis = np.linspace(0, pi/2, n_phi)
     surface_grid = np.nan * np.ones((n_phi, n_r, 3))
     shock_coords = np.nan * np.ones((n_r, 3))
     for j in range(n_r):

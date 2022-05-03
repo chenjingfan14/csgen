@@ -3,17 +3,20 @@ Tools for creating conical flow fields.
 
 Author: Reece Otto 13/12/2021
 """
-from csgen.compressible_flow import taylor_maccoll_mach, theta_oblique, \
+from csgen.compress_flow import taylor_maccoll_mach, theta_oblique, \
     M2_oblique, beta_oblique, p2_p1_oblique, T2_T1_oblique, p_pt, T_Tt
 from csgen.stream_utils import Streamline
 from csgen.math_utils import cone_x, cone_y, cone_z
 from scipy.integrate import ode
 from scipy.optimize import root
 from scipy.interpolate import interp1d
-from math import pi, cos, sin, tan, sqrt
+from math import pi, cos, sin, tan, sqrt, atan
 import pyvista as pv
 import numpy as np
 import matplotlib.pyplot as plt
+from vtkmodules.vtkCommonDataModel import vtkStructuredGrid
+from vtkmodules.vtkCommonCore import vtkPoints, vtkDoubleArray
+from vtkmodules.vtkIOXML import vtkXMLStructuredGridWriter
 
 class ConicalField():
     # base class for conical flow fields
@@ -28,6 +31,7 @@ class ConicalField():
 
     def u(self, theta):
         # check if given theta value is in range of valid values
+        theta = round(theta, 15)
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 
@@ -48,6 +52,7 @@ class ConicalField():
 
     def v(self, theta):
         # check if given theta value is in range of valid values
+        theta = round(theta, 15)
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 
@@ -68,6 +73,7 @@ class ConicalField():
 
     def M(self, theta):
         # check if given theta value is in range of valid values
+        theta = round(theta, 15)
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 
@@ -215,58 +221,48 @@ class ConicalField():
         if save_SVG == True:
             fig.savefig(file_name + '.svg', bbox_inches='tight')
 
-    def cone_surface(self, L_field, n_r=100, n_phi=100, save_VTK=True):
+    def cone_surface(self, L_field, n_r=100, n_phi=100):
         # generate surface grid for 3D cone
-        rs_cone = np.linspace(0, L_field*tan(self.thetac), n_r)
-        phis_cone = np.linspace(0, 2*pi, n_phi)
-        Rs_cone, Phis_cone = np.meshgrid(rs_cone, phis_cone)
-        cone_xs = cone_x(Rs_cone, Phis_cone)
-        cone_ys = cone_y(Rs_cone, Phis_cone)
-        cone_zs = cone_z(cone_xs, cone_ys, self.thetac, 1)
-        cone_surf = np.nan * np.ones((len(rs_cone), len(phis_cone), 3))
-        for i in range(len(rs_cone)):
-            for j in range(len(phis_cone)):
-                cone_surf[i][j] = [cone_xs[i][j], cone_ys[i][j], cone_zs[i][j]]
-        
-        # save as VTK, if desired
-        if save_VTK == True:
-            cone_grid = pv.StructuredGrid(cone_xs, cone_ys, cone_zs)
-            cone_grid.save("cone_surf.vtk")
+        rs = np.linspace(0, L_field*tan(self.thetac), n_r)
+        phis = np.linspace(0, 2*pi, n_phi)
+        cone_surf = np.nan * np.ones((n_r, n_phi, 3))
+        for i in range(n_r):
+            for j in range(n_phi):
+                x = rs[i]*np.cos(phis[j])
+                y = rs[i]*np.sin(phis[j])
+                a = tan(self.thetac)
 
+                cone_surf[i][j][0] = x
+                cone_surf[i][j][1] = y
+                cone_surf[i][j][2] = np.sqrt((x*x + y*y)/(a*a))
         return cone_surf
 
-    def shock_surface(self, L_field, n_r=100, n_phi=100, save_VTK=True):
+    def shock_surface(self, L_field, n_r=100, n_phi=100):
         # generate surface grid for 3D shock cone
-        rs_shock = np.linspace(0, L_field*tan(self.beta), n_r)
-        phis_shock = np.linspace(0, 2*pi, n_phi)
-        Rs_shock, Phis_shock = np.meshgrid(rs_shock, phis_shock)
-        shock_xs = cone_x(Rs_shock, Phis_shock)
-        shock_ys = cone_y(Rs_shock, Phis_shock)
-        shock_zs = cone_z(shock_xs, shock_ys, self.beta, 1)
-        shock_surf = np.nan * np.ones((len(rs_shock), len(phis_shock), 3))
-        for i in range(len(rs_shock)):
-            for j in range(len(phis_shock)):
-                shock_surf[i][j] = [shock_xs[i][j], shock_ys[i][j], 
-                                    shock_zs[i][j]]
-        
-        # save as VTK, if desired
-        if save_VTK == True:
-            shock_grid = pv.StructuredGrid(shock_xs, shock_ys, shock_zs)
-            shock_grid.save("shock_surf.vtk")
+        rs = np.linspace(0, L_field*tan(self.beta), n_r)
+        phis = np.linspace(0, 2*pi, n_phi)
+        shock_surf = np.nan * np.ones((n_r, n_phi, 3))
+        for i in range(n_r):
+            for j in range(n_phi):
+                x = rs[i]*np.cos(phis[j])
+                y = rs[i]*np.sin(phis[j])
+                a = tan(self.beta)
 
+                shock_surf[i][j][0] = x
+                shock_surf[i][j][1] = y
+                shock_surf[i][j][2] = np.sqrt((x*x + y*y)/(a*a))
         return shock_surf
 
-def conical_M0_beta(design_vals, settings):
-    # unpack dictionaries
-    M0 = design_vals['mach_no']
-    beta = design_vals['shock_angle']
-    gamma = design_vals.get('rat_spec_heats', 1.4)
-
-    dtheta = settings.get('theta_step', 0.01*pi/180)
-    max_steps = settings.get('max_steps', 10000)
-    interp_sing = settings.get('interp_sing', True)
-    print_freq = settings.get('print_freq', 10)
-    verbosity = settings.get('verbosity', 1)
+def conical_M0_beta(config):
+    # unpack dictionary
+    M0 = config['mach_no']
+    beta = config['shock_angle']
+    gamma = config.get('rat_spec_heats', 1.4)
+    dtheta = config.get('theta_step', 0.01*pi/180)
+    max_steps = config.get('max_steps', 10000)
+    interp_sing = config.get('interp_sing', True)
+    print_freq = config.get('print_freq', 10)
+    verbosity = config.get('verbosity', 1)
 
     # ODE initial conditions
     delta = theta_oblique(beta, M0, gamma)
@@ -294,15 +290,17 @@ def conical_M0_beta(design_vals, settings):
 
     # begin integration
     if verbosity == 1:
-        print('Integrating Taylor-Maccoll equations.')
+        print('Solving conical flow field...')
+        width = 12
+        print('-'*3*width)
+        print(f"{'Step':^{width}}{'Theta':^{width}}{'Angular':^{width}}")
+        print(f"{'Number':^{width}}{'(deg)':^{width}}{'Mach No.':^{width}}")
+        print('-'*3*width)
     i = 0
     while r.successful() and r.y[1] < 0:
         r.integrate(r.t - dt)
         if verbosity == 1 and i % print_freq == 0:
-            str_1 = f'Step={i} '
-            str_2 = f'theta={r.t * 180/pi:.4} '
-            str_3 = f'v={r.y[1]:.4}'
-            print(str_1 + str_2 + str_3)
+            print(f"{i:^{width}}{r.t*180/pi:^{width}.4}{r.y[1]:^{width}.4}")
         thetas.append(r.t)
         us.append(r.y[0])
         vs.append(r.y[1])
@@ -332,63 +330,62 @@ def conical_M0_beta(design_vals, settings):
         
     # print integration termination statement
     if verbosity == 1:
-        print('\nIntegration was terminated.')
-        reason = 'Reason: '
         # print reason for integration termination
-        if r.successful() == False:
+        if not r.successful():
             raise AssertionError('Integration failed.')
-                
         else:
-            if r.y[1] >= 0:
-                print(reason + 'Taylor-Maccoll singularity detected. \n')
-            else:
-                print(reason + 'Unknown. \n')
+            print('-'*3*width)
+            print('Integration terminated successfully.\n')
         
-        print(f'Solution at final step:')
-        print(f'theta = {thetas[-1] * 180/pi:.4} deg, u = {us[-1]:.4}, ' + \
-            f'v = {vs[-1]:.4}\n')
+        if interp_sing:
+            print('Solution at interpolated singularity:')
+        else:
+            print('Solution at final step:')
+        print(f'theta={thetas[-1] * 180/pi:.4} deg, u={us[-1]:.4}, ' + \
+            f'v={vs[-1]:.4}\n')
 
     # return conical flow field object
     field = ConicalField(thetas, us, vs, M0, beta, thetas[-1], gamma)
     return field
 
-def conical_M0_thetac(design_vals, settings):
-    # unpack dictionaries
-    M0 = design_vals['M0']
-    thetac = design_vals['thetac']
-    gamma = design_vals.get('gamma', 1.4)
+def conical_M0_thetac(config):
+    # unpack dictionary
+    M0 = config['mach_no']
+    thetac = config['cone_angle']
+    gamma = config.get('rat_spec_heats', 1.4)
+    beta_guess = config.get('beta_guess', 20*pi/180)
+    tol = config.get('tol', 1.0E-6)
+    dtheta = config.get('theta_step', 0.01*pi/180)
+    max_steps = config.get('max_steps', 10000)
+    interp_sing = config.get('interp_sing', True)
+    print_freq = config.get('print_freq', 10)
+    verbosity = config.get('verbosity', 1)
 
-    beta_guess = settings.get('beta_guess', 20*pi/180)
-    tol = settings.get('tol', 1.0E-6)
-    dtheta = settings.get('dtheta', 0.01*pi/180)
-    max_steps = settings.get('max_steps', 10000)
-    interp_sing = settings.get('interp_sing', True)
-    print_freq = settings.get('print_freq', 10)
-    verbosity = settings.get('verbosity', 1)
-
-    settings_new = settings.copy()
-    settings_new['verbosity'] = 0
+    config_new = config.copy()
+    config_new['verbosity'] = 0
     
     def res(beta):
         # thetac residual function
-        design_vals_new = design_vals.copy()
-        design_vals_new['beta'] = beta
-        field = conical_M0_beta(design_vals_new, settings_new)
+        config_new['shock_angle'] = beta
+        field = conical_M0_beta(config_new)
         res = thetac - field.thetac
 
         # print solver progress
         if verbosity == 1:
             global it
-            str_1 = f'Iteration={it} '
-            str_2 = f'beta0={beta[0] * 180/pi:.4} '
-            str_3 = f'residual={res:.4} '
-            print(str_1 + str_2 + str_3)
+            beta0 = beta[0] * 180/pi
+            print(f'{it:^{width}}{beta0:^{width}.4}{res:^{width}.2e}')
             it += 1
         return res
         
     # use root finder to iterate residual function
     if verbosity == 1:
-        print('Using root finder to calculate beta0.')
+        print('Using root finder to calculate shock angle...')
+        width = 12
+        print('-'*3*width)
+        print(f"{'Iteration':^{width}}{'Shock':^{width}}{'Angle':^{width}}")
+        print(f"{'Number':^{width}}{'Angle (deg)':^{width}}{'Residual':^{width}}")
+        print('-'*3*width)
     global it
     it = 0
     sol = root(res, beta_guess, method='hybr', tol=tol)
@@ -396,11 +393,104 @@ def conical_M0_thetac(design_vals, settings):
         raise AssertionError('Root finder failed to converge.')
     else:
         if verbosity == 1:
-            print('\nRoot finder has converged.\n')
+            print('-'*3*width)
+            print('Root finder successfully converged.\n')
     
     # return conical field object
     beta = sol.x[0]
-    design_vals_new = design_vals.copy()
-    design_vals['beta'] = beta
-    field = conical_M0_beta(design_vals, settings)
+    config_new = config.copy()
+    config['shock_angle'] = beta
+    field = conical_M0_beta(config)
     return field
+
+def eval_flow_data(field, mesh, free_stream):
+    n_i = len(mesh)
+    n_j = len(mesh[0])
+    
+    labels = ['x', 'y', 'z', 'theta', 'delta', 'mach_no', 'press', 'temp']
+    flow_data = {}
+    for label in labels:
+        flow_data[label] = np.nan * np.ones((n_i, n_j))
+
+    for i in range(n_i):
+        for j in range(n_j):
+            x_ij = mesh[i][j][0]
+            y_ij = mesh[i][j][1]
+            z_ij = mesh[i][j][2]
+            theta_ij = atan(sqrt(x_ij**2 + y_ij**2)/z_ij)
+
+            flow_data['x'][i][j] = x_ij
+            flow_data['y'][i][j] = y_ij
+            flow_data['z'][i][j] = z_ij
+            flow_data['theta'][i][j] = theta_ij
+            flow_data['delta'][i][j] = atan(field.v(theta_ij)/field.u(theta_ij))
+            flow_data['mach_no'][i][j] = field.M(theta_ij)
+            flow_data['press'][i][j] = field.p(theta_ij, free_stream['press'])
+            flow_data['temp'][i][j] = field.T(theta_ij, free_stream['temp'])
+
+    return flow_data
+
+def flow_data_to_vtk(flow_data, file_name='flow_data'):
+    n_i = len(flow_data['x'])
+    n_j = len(flow_data['x'][0])
+
+    s_grid = vtkStructuredGrid()
+    s_grid.SetDimensions([n_i, n_j, 1])
+    points = vtkPoints()
+    points.Allocate(n_i*n_j*1)
+
+    x = vtkDoubleArray()
+    y = vtkDoubleArray()
+    z = vtkDoubleArray()
+    theta = vtkDoubleArray()
+    delta = vtkDoubleArray()
+    mach_no = vtkDoubleArray()
+    press = vtkDoubleArray()
+    temp = vtkDoubleArray()
+    
+    x.SetName('x')
+    y.SetName('y')
+    z.SetName('z')
+    theta.SetName('Theta (rad)')
+    delta.SetName('Flow Angle (rad)')
+    mach_no.SetName('Mach Number')
+    press.SetName('Pressure (Pa)')
+    temp.SetName('Temperature (K)')
+
+    for j in range(n_j):
+        j_offset = j*n_i
+        for i in range(n_i):
+            offset = i + j_offset
+            point_ij = [flow_data['x'][i][j], flow_data['y'][i][j], 
+                        flow_data['z'][i][j]]
+            points.InsertPoint(offset, point_ij)
+            x.InsertTuple(offset, [flow_data['x'][i][j]])
+            y.InsertTuple(offset, [flow_data['y'][i][j]])
+            z.InsertTuple(offset, [flow_data['z'][i][j]])
+            theta.InsertTuple(offset, [flow_data['theta'][i][j]])
+            delta.InsertTuple(offset, [flow_data['delta'][i][j]])
+            mach_no.InsertTuple(offset, [flow_data['mach_no'][i][j]])
+            press.InsertTuple(offset, [flow_data['press'][i][j]])
+            temp.InsertTuple(offset, [flow_data['temp'][i][j]])
+    
+    s_grid.SetPoints(points)
+    s_grid.GetPointData().AddArray(x)
+    s_grid.GetPointData().AddArray(y)
+    s_grid.GetPointData().AddArray(z)
+    s_grid.GetPointData().AddArray(theta)
+    s_grid.GetPointData().AddArray(delta)
+    s_grid.GetPointData().AddArray(mach_no)
+    s_grid.GetPointData().AddArray(press)
+    s_grid.GetPointData().AddArray(temp)
+
+    writer = vtkXMLStructuredGridWriter()
+    writer.SetInputData(s_grid)
+    writer.SetFileName(file_name + '.vtu')
+    writer.SetDataModeToAscii()
+    writer.Update()
+
+def avg_flow_data(flow_data):
+    avg_props = flow_data.copy()
+    for key in avg_props:
+        avg_props[key] = np.average(avg_props[key])
+    return avg_props
