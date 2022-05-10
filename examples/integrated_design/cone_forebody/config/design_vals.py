@@ -10,7 +10,7 @@ https://doi.org/10.14264/uql.2018.437
 
 Author: Reece Otto 07/04/2022
 """
-from csgen.atmosphere import atmos_interp
+from csgen.atmos import atmos_interp
 import json
 from math import pi
 
@@ -57,29 +57,6 @@ with open('design_vals.json', 'w') as f:
 """
 
 #------------------------------------------------------------------------------#
-#                                 Diffuser                                     #
-#------------------------------------------------------------------------------#
-# define parameters for truncated Busemann diffuser
-diffuser_vals = {
-    # parameters to generate truncated Busemann diffuser
-    'buse_vals': {
-        'rat_spec_heats': gamma, # ratio of specific heats
-        'p_exit': 50E3,          # exit pressure [Pa]
-        'trunc_angle': 8*pi/180, # truncation angle [rad]
-        'beta2_guess': 0.2088,   # guess for terminating shock angle [rad]
-        'M2_guess': 5.912        # guess for Mach no at station 2
-    },
-    # Taylor-Maccoll and streamline integration settings 
-    'buse_settings': {
-        'theta_step': 0.05*pi/180, # theta step size [rad]
-        'max_steps': 10000,        # maximum number of integration steps
-        'print_freq': 500,         # printing frequency of integration info
-        'interp_sing': True,       # interpolate for Taylor-Macoll singularity
-        'verbosity': 1             # verbosity level
-    }
-}
-
-#------------------------------------------------------------------------------#
 #                                   Inlet                                      #
 #------------------------------------------------------------------------------#
 # define parameters for shape-transitioning inlet
@@ -100,7 +77,4 @@ inlet_vals = {
     }
 }
 
-#------------------------------------------------------------------------------#
-#                                 File Export                                  #
-#------------------------------------------------------------------------------#
 """

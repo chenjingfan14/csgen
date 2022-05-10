@@ -329,20 +329,20 @@ def conical_M0_beta(config):
         vs.pop(-1)
         
     # print integration termination statement
-    if verbosity == 1:
-        # print reason for integration termination
-        if not r.successful():
-            raise AssertionError('Integration failed.')
-        else:
+    if not r.successful():
+        raise AssertionError('Integration failed.')
+    else:
+        if verbosity == 1:
+            # print reason for integration termination
             print('-'*3*width)
             print('Integration terminated successfully.\n')
         
-        if interp_sing:
-            print('Solution at interpolated singularity:')
-        else:
-            print('Solution at final step:')
-        print(f'theta={thetas[-1] * 180/pi:.4} deg, u={us[-1]:.4}, ' + \
-            f'v={vs[-1]:.4}\n')
+            if interp_sing:
+                print('Solution at interpolated singularity:')
+            else:
+                print('Solution at final step:')
+            print(f'theta={thetas[-1] * 180/pi:.4} deg, u={us[-1]:.4}, ' + \
+                f'v={vs[-1]:.4}\n')
 
     # return conical flow field object
     field = ConicalField(thetas, us, vs, M0, beta, thetas[-1], gamma)

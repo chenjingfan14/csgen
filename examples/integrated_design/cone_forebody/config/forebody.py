@@ -1,5 +1,6 @@
 """
-Generate conical forebody geometry.
+Generate conical forebody geometry, inlet capture shape and calculate inlet
+inflow conditions.
 
 Author: Reece Otto 01/05/2022
 """
@@ -100,17 +101,17 @@ n_j = n_i
 cap_mesh = cap_surf.grid_eval(n_s=n_i, n_t=n_j)
 exit_data = eval_flow_data(field, cap_mesh, free_stream)
 flow_data_to_vtk(exit_data, file_name='inlet_flow')
-inlet_flow = avg_flow_data(exit_data)
+inlet_inflow = avg_flow_data(exit_data)
 
 # replace average xyz coords and theta with attachment coords
-inlet_flow['x'] = 0.0
-inlet_flow['y'] = exit_data['y'][-1][n_j//2]
-inlet_flow['z'] = fb_len
-inlet_flow['theta'] = exit_data['theta'][-1][n_j//2]
+inlet_inflow['x'] = 0.0
+inlet_inflow['y'] = exit_data['y'][-1][n_j//2]
+inlet_inflow['z'] = fb_len
+inlet_inflow['theta'] = exit_data['theta'][-1][n_j//2]
 
 # export inlet inflow conditions
-with open('inlet_flow.json', 'w') as f:
-    json.dump(inlet_flow, f, ensure_ascii=False, indent=2)
+with open('inlet_inflow.json', 'w') as f:
+    json.dump(inlet_inflow, f, ensure_ascii=False, indent=2)
 
 # export capture shape
 west_top_bndry = cap_mesh[n_i//2:,0]
