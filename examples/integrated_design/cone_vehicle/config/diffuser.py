@@ -1,9 +1,10 @@
 import json
+import os
 from eilmer.spline import CubicSpline
 
 # read inflow parameters from json file
-f = open('diffuser_vals.json')
-diffuser_vals = json.load(f)
+f = open('inlet_inflow.json')
+inflow = json.load(f)
 f.close()
 
 config.axisymmetric = True
@@ -11,11 +12,11 @@ L_ext = 0.05
 
 init_gas_model('ideal-air-gas-model.lua')
 gas1 = GasState(config.gmodel)
-gas1.p = diffuser_vals['inflow_data']['press']
-gas1.T = diffuser_vals['inflow_data']['temp']
+gas1.p = inflow['press']
+gas1.T = inflow['temp']
 gas1.update_thermo_from_pT()
 gas1.update_sound_speed()
-M1 = diffuser_vals['inflow_data']['mach_no']
+M1 = inflow['mach_no']
 V1 = M1 * gas1.a
 
 config.max_step_relax = 40

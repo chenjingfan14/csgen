@@ -3,6 +3,185 @@ Generating a shape-transition inlet.
 
 Author: Reece Otto 25/03/2022
 """
+import os 
+from csgen.stream_utils import shock_surface
+from csgen.grid import StructuredGrid
+from nurbskit.spline_fitting import global_surf_interp
+from nurbskit.surface import BSplineSurface, NURBSSurface
+from nurbskit.utils import auto_knot_vector
+from nurbskit.geom_utils import rotate_x, translate
+import csv
+from scipy import optimize
+import numpy as np
+import json
+from math import tan, sqrt
+
+#------------------------------------------------------------------------------#
+#                 Calculating Forebody-Inlet Interface Contour                 #
+#------------------------------------------------------------------------------#
+# cosntruct inlet shock surface
+config_dir = os.getcwd()
+main_dir = os.path.dirname(config_dir)
+diffuser_dir = main_dir + '/diffuser'
+inlet_dir = main_dir + '/inlet'
+os.chdir(inlet_dir)
+diffuser_vals = {
+    'puffin_dir': diffuser_dir,
+    'job_name': 'diffuser',
+    'n_r': 100,
+    'n_phi': 100,
+    'p_rat_shock': 2.0,
+    'dt': 1.0E-5,
+    'max_step': 100000
+}
+print('Constructing inlet shock surface from puffin solution...')
+inlet_shock = shock_surface(diffuser_vals)
+StructuredGrid(inlet_shock).export_to_vtk_xml(file_name='inlet_shock_raw')
+poly_degree = 3
+U_shock, V_shock, P_shock = global_surf_interp(inlet_shock, poly_degree, 
+                                               poly_degree)
+shock_spline = BSplineSurface(p=poly_degree, q=poly_degree, U=U_shock, 
+                              V=V_shock, P=P_shock)
+print('Done.')
+
+# find inlet attach point by projecting capture shape onto inlet shock surface
+cap_shape = []
+with open('cap_shape_stream.csv', 'r') as csvfile:
+    file = csv.reader(csvfile, delimiter=' ')
+    next(file)
+    cap_shape = []
+    for row in file:
+        cap_shape.append([float(row[0]), float(row[1])])
+attach_point = np.array(cap_shape[len(cap_shape)//4])
+
+def dist_attach(params, shock_spline, attach_point):
+    u = params[0]
+    v = params[1]
+    return np.linalg.norm(attach_point - shock_spline(u, v)[:2])
+
+bounds = ((0, 1), (0, 1))
+sol = optimize.minimize(dist_attach, [0.5, 0.5], 
+    args=(shock_spline, attach_point), method='SLSQP', bounds=bounds)
+if not sol.success or sol.fun > 1.0E-5:
+    raise AssertionError('Optimizer failed to locate inlet attachment point.')
+inlet_attach = shock_spline(sol.x[0], sol.x[1])
+inlet_attach[0] = 0.0
+
+# tranform inlet shock to correct orientation
+os.chdir(diffuser_dir)
+f = open('inlet_inflow.json')
+forebody_attach = json.load(f)
+f.close()
+os.chdir(inlet_dir)
+
+y_shift = -inlet_attach[1] + forebody_attach['y']
+z_shift = -inlet_attach[2] + forebody_attach['z']
+P_shock_trans = translate(P_shock, y_shift=y_shift, z_shift=z_shift)
+P_shock_trans = rotate_x(P_shock_trans, angle=forebody_attach['theta'], 
+    x_origin=1.0, y_origin=forebody_attach['y'], z_origin=forebody_attach['z'])
+shock_spline_trans = BSplineSurface(p=poly_degree, q=poly_degree, U=U_shock, 
+                                    V=V_shock, P=P_shock_trans)
+inlet_shock_trans = shock_spline_trans.list_eval(N_u=len(inlet_shock), 
+                                                 N_v=len(inlet_shock[0]))
+StructuredGrid(inlet_shock_trans).export_to_vtk_xml(file_name='inlet_shock')
+
+# create NURBS patch for quarter-section of cone
+back_z = forebody_attach['z']
+back_rad = back_z * tan(forebody_attach['theta'])
+mid_z = back_z / 2
+mid_rad = back_rad / 2
+
+P_cone = [[[-mid_rad, 0.0, mid_z], [-mid_rad, -mid_rad, mid_z], 
+           [0.0, -mid_rad, mid_z]],
+              
+          [[-back_rad, 0.0, back_z], [-back_rad, -back_rad, back_z], 
+           [0.0, -back_rad, back_z]]]
+G_cone = [[1, 1/sqrt(2), 1],
+          [1, 1/sqrt(2), 1]]
+p_cone = 1
+q_cone = 2
+U_cone = auto_knot_vector(len(P_cone), p_cone)
+V_cone = auto_knot_vector(len(P_cone[0]), q_cone)
+cone_sec = NURBSSurface(P=P_cone, G=G_cone, p=p_cone, q=q_cone, 
+                        U=U_cone, V=V_cone)
+cone_sec_grid = cone_sec.list_eval()
+StructuredGrid(cone_sec_grid).export_to_vtk_xml(file_name='cone_sec')
+
+# calculate intersection contour between cone_sec and shock_spline
+def dist_intersect(params, surf_1, surf_2, bndry, u1):
+    if bndry == 'left':
+        u1 = 0
+        v1 = params[0]
+    elif bndry == 'right':
+        u1 = params[0]
+        v1 = 1
+    else:
+        u1 = u1
+        v1 = params[0]
+    u2 = params[1]
+    v2 = params[2]
+    return np.linalg.norm(surf_1(u1, v1) - surf_2(u2, v2))
+
+# solve for parameters at contour midpoint
+bounds = ((0, 1), (0, 1), (0, 1))
+sol_mid = optimize.minimize(dist_intersect, [0.5, 1.0, 1.0], 
+    args=(shock_spline_trans, cone_sec, 'left', None), method='SLSQP', 
+    bounds=bounds)
+if not sol_mid.success or sol_mid.fun > 1.0E-5:
+    raise AssertionError('Optimizer failed to locate mid-point of intersection '
+        'contour.')
+
+# solve for parameters at edge of contour
+sol_end = optimize.minimize(dist_intersect, [0.5, 0.5, 0.5], 
+    args=(shock_spline_trans, cone_sec, 'right', None), method='SLSQP', 
+    bounds=bounds)
+if not sol_end.success or sol_end.fun > 1.0E-5:
+    raise AssertionError('Optimizer failed to locate edge of intersection '
+        'contour.')
+
+# solve for parameters along contour
+n_points = 20
+u1s = np.linspace(0, sol_end.x[0], n_points)
+v1_guesses = np.linspace(sol_mid.x[0], 1, n_points)
+valid_points = []
+
+print('Calculating intersection contour...')
+for i in range(n_points):
+    sol_end = optimize.minimize(dist_intersect, [v1_guesses[i], 0.5, 0.5], 
+    args=(shock_spline_trans, cone_sec, 'mid', u1s[i]), method='SLSQP', 
+    bounds=bounds)
+
+    if sol_end.success and sol_end.fun <= 1.0E-5:
+        coords = cone_sec(sol_end.x[1], sol_end.x[2])
+        valid_points.append(coords)
+        print(f'point {i}: dist={sol_end.fun:.4e}, coords=[{coords[0]:.3f}, '
+              f'{coords[1]:.3f}, {coords[2]:.3f}]')
+
+# create other half of contour by reflecting along y-axis
+contour_left = np.array(valid_points[::-1])
+contour_right = np.array(valid_points[1:])
+for i in range(len(contour_right)):
+    contour_right[i][0] *= -1
+intersect_contour = np.concatenate((contour_left, contour_right))
+with open('intersect_contour.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=' ')
+    writer.writerow(["x", "y", "z"])
+    for i in range(len(intersect_contour)):
+        writer.writerow([intersect_contour[i][0], intersect_contour[i][1], 
+                         intersect_contour[i][2]])
+
+
+
+
+
+
+
+
+
+
+
+
+"""
 from csgen.stream_utils import inlet_stream_trace, shock_surface
 from csgen.inlet_utils import inlet_blend
 from nurbskit.path import Ellipse, Rectangle
@@ -16,7 +195,7 @@ from scipy import interpolate, optimize
 import os
 import json
 import matplotlib.pyplot as plt
-
+"""
 #------------------------------------------------------------------------------#
 #                         Inlet defined by capture shape                       #
 #------------------------------------------------------------------------------#
@@ -75,7 +254,6 @@ inlet_A_vals = {
     'save_VTK': False,              # option to save inlet surface as VTK file
     'file_name_VTK': 'inlet_A'      # file name for VTK file
 }
-
 
 # run streamline tracer
 inlet_A_coords = inlet_stream_trace(inlet_A_vals)

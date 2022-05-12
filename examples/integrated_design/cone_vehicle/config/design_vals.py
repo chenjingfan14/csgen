@@ -33,7 +33,7 @@ design_vals = {
     },
     # forebody design values
     'forebody': {
-        'cone_angle': 4.0*pi/180, # half-angle of conical forebody [rad]
+        'cone_angle': 6.0*pi/180, # half-angle of conical forebody [rad]
         'length': 15.0,           # length of forebody
     },
     # inlet design values

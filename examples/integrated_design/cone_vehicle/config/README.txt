@@ -13,7 +13,7 @@ forebody.py
 	- generates conical forebody surface
 		-> conical flow field is generated based on free-stream conditions and
 		   forebody design values
-		-> the conical forebody and shock surfaces are exported as VTK XML
+		-> the conical forebody and shock surfaces are exported as VTK XML file
 	- generates provisional capture shape
 		-> capture angle of singular engine module is calculated from desired
 		   smile angle and number of modules

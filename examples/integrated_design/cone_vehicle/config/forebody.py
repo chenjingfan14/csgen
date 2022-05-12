@@ -10,8 +10,7 @@ from csgen.conical_flow import (conical_M0_thetac,
     eval_flow_data, 
     flow_data_to_vtk, 
     avg_flow_data)
-from csgen.grid import StructuredGrid
-from csgen.grid import CircularArc, CoonsPatch
+from csgen.grid import StructuredGrid, CircularArc, CoonsPatch
 from nurbskit.path import Bezier
 from math import pi, tan, cos, sin
 import numpy as np
@@ -103,16 +102,6 @@ exit_data = eval_flow_data(field, cap_mesh, free_stream)
 flow_data_to_vtk(exit_data, file_name='inlet_flow')
 inlet_inflow = avg_flow_data(exit_data)
 
-# replace average xyz coords and theta with attachment coords
-inlet_inflow['x'] = 0.0
-inlet_inflow['y'] = exit_data['y'][-1][n_j//2]
-inlet_inflow['z'] = fb_len
-inlet_inflow['theta'] = exit_data['theta'][-1][n_j//2]
-
-# export inlet inflow conditions
-with open('inlet_inflow.json', 'w') as f:
-    json.dump(inlet_inflow, f, ensure_ascii=False, indent=2)
-
 # export capture shape
 west_top_bndry = cap_mesh[n_i//2:,0]
 north_bndry = cap_mesh[-1,1:]
@@ -121,8 +110,23 @@ south_bndry = cap_mesh[0,1:-1][::-1]
 west_bot_bndry = cap_mesh[:n_i//2+1,0]
 cap_shape = np.concatenate((west_top_bndry, north_bndry, east_bndry, 
                             south_bndry, west_bot_bndry))
+
 with open('cap_shape.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=' ')
     writer.writerow(["x", "y", "z"])
     for i in range(len(cap_shape)):
         writer.writerow([cap_shape[i][0], cap_shape[i][1], fb_len])
+
+# replace average xyz coords and theta with attachment coords
+inlet_inflow['x'] = 0.0
+inlet_inflow['y'] = exit_data['y'][-1][n_j//2]
+inlet_inflow['z'] = fb_len
+inlet_inflow['theta'] = forebody_vals['cone_angle']
+
+# export inlet inflow conditions
+diffuser_dir = main_dir + '/diffuser'
+if not os.path.exists(diffuser_dir):
+    os.mkdir(diffuser_dir)
+os.chdir(diffuser_dir)
+with open('inlet_inflow.json', 'w') as f:
+    json.dump(inlet_inflow, f, ensure_ascii=False, indent=2)

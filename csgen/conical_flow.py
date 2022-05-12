@@ -10,7 +10,7 @@ from csgen.math_utils import cone_x, cone_y, cone_z
 from scipy.integrate import ode
 from scipy.optimize import root
 from scipy.interpolate import interp1d
-from math import pi, cos, sin, tan, sqrt, atan
+from math import pi, cos, sin, tan, sqrt, atan, isclose
 import pyvista as pv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,7 +31,11 @@ class ConicalField():
 
     def u(self, theta):
         # check if given theta value is in range of valid values
-        theta = round(theta, 15)
+        if isclose(theta, self.thetas[-1], abs_tol=1.0E-15):
+            theta = self.thetas[-1]
+        elif isclose(theta, self.thetas[0], abs_tol=1.0E-15):
+            theta = self.thetas[0]
+        
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 
@@ -51,8 +55,12 @@ class ConicalField():
             return interp_us(theta)
 
     def v(self, theta):
-        # check if given theta value is in range of valid values
-        theta = round(theta, 15)
+        # check if theta is close to boundaries
+        if isclose(theta, self.thetas[-1], abs_tol=1.0E-15):
+            theta = self.thetas[-1]
+        elif isclose(theta, self.thetas[0], abs_tol=1.0E-15):
+            theta = self.thetas[0]
+
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 
@@ -72,8 +80,11 @@ class ConicalField():
             return interp_vs(theta)
 
     def M(self, theta):
-        # check if given theta value is in range of valid values
-        theta = round(theta, 15)
+        if isclose(theta, self.thetas[-1], abs_tol=1.0E-15):
+            theta = self.thetas[-1]
+        elif isclose(theta, self.thetas[0], abs_tol=1.0E-15):
+            theta = self.thetas[0]
+
         if theta > self.thetas[0] or theta < self.thetas[-1]:
             raise AssertionError('Invalid theta value given.')
 

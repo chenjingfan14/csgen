@@ -672,9 +672,4 @@ def shock_surface(design_vals):
             surface_grid[i][j][2] = z
 
     os.chdir(current_dir)
-    """
-    surface_grid = pv.StructuredGrid(surface_grid[:,:,0], surface_grid[:,:,1], 
-        surface_grid[:,:,2])
-    surface_grid.save('inlet_shock.vtk')
-    """
     return surface_grid

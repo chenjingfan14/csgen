@@ -10,6 +10,7 @@ import numpy as np
 import os
 import json
 import csv
+import shutil
 
 # print title
 title_width = 38
@@ -27,8 +28,8 @@ inlet_vals = design_vals['inlet']
 free_stream = design_vals['free_stream']
 
 # read inflow parameters
-inlet_dir = main_dir + '/inlet'
-os.chdir(inlet_dir)
+diffuser_dir = main_dir + '/diffuser'
+os.chdir(diffuser_dir)
 f = open('inlet_inflow.json')
 inflow = json.load(f)
 f.close()
@@ -53,6 +54,8 @@ field.Streamline = field.Streamline.truncate(
     trunc_angle=inlet_vals['trunc_angle'])
 
 # import capture shape
+inlet_dir = main_dir + '/inlet'
+os.chdir(inlet_dir)
 with open('cap_shape.csv', 'r') as csvfile:
     file = csv.reader(csvfile, delimiter=' ')
     next(file)
@@ -60,6 +63,7 @@ with open('cap_shape.csv', 'r') as csvfile:
     for row in file:
         cap_shape.append([float(row[0]), float(row[1])])
 cap_shape = np.array(cap_shape)
+os.chdir(inlet_dir)
 
 # translate capture shape and save as csv
 min_y = np.min(cap_shape[:,1])
@@ -70,6 +74,8 @@ with open('cap_shape_stream.csv', 'w', newline='') as csvfile:
     writer.writerow(["x", "y"])
     for i in range(len(cap_shape)):
         writer.writerow([cap_shape[i][0], cap_shape[i][1]])
+diffuser_dir = main_dir + '/diffuser'
+os.chdir(diffuser_dir)
 
 # find point on cap shape with max radius
 cap_radii = np.zeros_like(cap_shape[:,1])
@@ -77,7 +83,7 @@ for i in range(len(cap_shape)):
     cap_radii[i] = sqrt(cap_shape[i][0]**2 + cap_shape[i][1]**2)
 
 # scale and translate
-scaler = 1.05 * np.max(cap_radii) / field.Streamline.ys[0]
+scaler = 1.2 * np.max(cap_radii) / field.Streamline.ys[0]
 field.Streamline = field.Streamline.scale(scaler, scaler, scaler)
 z_shift = abs(field.Streamline.zs[0])
 field.Streamline = field.Streamline.translate(z_shift=z_shift)
@@ -86,10 +92,23 @@ field.Streamline = field.Streamline.translate(z_shift=z_shift)
 field.plot(file_name='trunc_buse', show_mach_wave=False, show_exit_shock=False)
 field.Streamline.save_to_csv('trunc_buse')
 
+# plot capture shape in entrance of diffuser
+fig, ax = plt.subplots()
+diffuser_ent = plt.Circle((0, 0), field.Streamline.ys[0], fill=False, 
+    color='red', label='Diffuser Entrance')
+ax.plot(cap_shape[:,0], cap_shape[:,1], color='black', label='Capture Shape')
+ax.plot([-field.Streamline.ys[0], field.Streamline.ys[0]], [0.0, 0.0], 'k--')
+ax.add_patch(diffuser_ent)
+plt.grid()
+plt.legend()
+plt.axis('equal')
+fig.savefig('diffuser_ent.svg', bbox_inches='tight')
+
 # generate gas input file
-diffuser_dir = main_dir + '/diffuser'
-if not os.path.exists(diffuser_dir):
-    os.mkdir(diffuser_dir)
-os.chdir(diffuser_dir )
 with open('ideal-air.inp', 'w') as f:
     f.write('model = "IdealGas"\n' + "species = {'air'}")
+
+# copy puffin job script to diffuser directory
+config_job_path = config_dir + '/diffuser.py'
+diffuser_job_path = diffuser_dir + '/diffuser.py'
+shutil.copyfile(config_job_path, diffuser_job_path)
