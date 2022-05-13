@@ -5,19 +5,21 @@ Author: Reece Otto 25/03/2022
 """
 import os 
 from csgen.stream_utils import shock_surface
-from csgen.grid import StructuredGrid
-from nurbskit.spline_fitting import global_surf_interp
+from csgen.grid import StructuredGrid, CircularArc
+from nurbskit.spline_fitting import global_curve_interp, global_surf_interp
+from nurbskit.path import Bezier, BSpline
 from nurbskit.surface import BSplineSurface, NURBSSurface
 from nurbskit.utils import auto_knot_vector
 from nurbskit.geom_utils import rotate_x, translate
+from nurbskit.cad_output import nurbs_surf_to_iges
 import csv
 from scipy import optimize
 import numpy as np
 import json
-from math import tan, sqrt
+from math import pi, sin, cos, tan, sqrt
 
 #------------------------------------------------------------------------------#
-#                 Calculating Forebody-Inlet Interface Contour                 #
+#                          Adjusting Capture Shape                             #
 #------------------------------------------------------------------------------#
 # cosntruct inlet shock surface
 config_dir = os.getcwd()
@@ -157,30 +159,109 @@ for i in range(n_points):
         print(f'point {i}: dist={sol_end.fun:.4e}, coords=[{coords[0]:.3f}, '
               f'{coords[1]:.3f}, {coords[2]:.3f}]')
 
-# create other half of contour by reflecting along y-axis
+# fit B-Spline to intersection curve
+valid_points[0] = [0.0, forebody_attach['y'], forebody_attach['z']]
 contour_left = np.array(valid_points[::-1])
-contour_right = np.array(valid_points[1:])
-for i in range(len(contour_right)):
-    contour_right[i][0] *= -1
-intersect_contour = np.concatenate((contour_left, contour_right))
+p_int = 3
+U_int, P_int = global_curve_interp(contour_left, p_int)
+int_spline = BSpline(P=P_int, U=U_int, p=p_int)
+
+# find where capture shape side-wall connects to intersection contour
+os.chdir(config_dir)
+f = open('design_vals.json')
+design_vals = json.load(f)
+f.close()
+os.chdir(inlet_dir)
+inlet_vals = design_vals['inlet']
+forebody_vals = design_vals['forebody']
+fb_len = forebody_vals['length']
+r_cone = fb_len*tan(forebody_vals['cone_angle'])
+mod_angle = inlet_vals['smile_angle']/inlet_vals['no_modules']
+left_angle = (3*pi - mod_angle)/2
+
+def left_sidewall(x):
+    return x*tan(left_angle)
+
+def dist_line(params, curve):
+    u = params[0]
+    x = params[1]
+    line_point = np.array([x, left_sidewall(x)])
+    return np.linalg.norm(curve(u)[:2] - line_point)
+
+bounds = ((0, 1), (r_cone*cos(left_angle), 0.0))
+sol_corn = optimize.minimize(dist_line, [0.5, r_cone*cos(left_angle)/2], 
+    args=(int_spline), method='SLSQP', bounds=bounds)
+if not sol_corn.success or sol_corn.fun > 1.0E-5:
+    raise AssertionError('Optimizer failed to project the sidewall of capture '
+        'to intersection contour.')
+
+# adjust top boundary of capture shape
+proj_point = int_spline(sol_corn.x[0])
+valid_points = [point for point in valid_points if point[0] > proj_point[0]]
+valid_points.append(proj_point)
+cap_top_left = np.array(valid_points[::-1])
+cap_top_right = np.array(valid_points[1:])
+for i in range(len(cap_top_right)):
+    cap_top_right[i][0] *= -1
+cap_top = np.concatenate((cap_top_left, cap_top_right))
 with open('intersect_contour.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=' ')
     writer.writerow(["x", "y", "z"])
-    for i in range(len(intersect_contour)):
-        writer.writerow([intersect_contour[i][0], intersect_contour[i][1], 
-                         intersect_contour[i][2]])
+    for i in range(len(cap_top)):
+        writer.writerow([cap_top[i][0], cap_top[i][1], cap_top[i][2]])
+p_north = 3
+U_north, P_north = global_curve_interp(cap_top, p_north)
+north = BSpline(P=P_north, U=U_north, p=p_north)
 
+# adjust remaining boundaries
+right_angle = (3*pi + mod_angle)/2
+cap_shape = []
+with open('cap_shape.csv', 'r') as csvfile:
+    file = csv.reader(csvfile, delimiter=' ')
+    next(file)
+    cap_shape = []
+    for row in file:
+        cap_shape.append([float(row[0]), float(row[1])])
+r_shock = abs(np.min(np.array(cap_shape)[:,1]))
+lower_right = [r_shock*cos(right_angle), r_shock*sin(right_angle), fb_len]
+upper_right = proj_point.copy()
+upper_right[0] *= -1
+lower_left = [r_shock*cos(left_angle), r_shock*sin(left_angle), fb_len]
+upper_left = proj_point
+east = Bezier(P=[lower_right, upper_right])
+west = Bezier(P=[lower_left, upper_left])
+south = CircularArc(lower_left, lower_right)
 
+# discretize capture shape
+n_i = 21
+n_j = 21
+west_upper_disc = west.list_eval(u_i=0.5, n_points=n_j//2)[:,:-1]
+north_disc = north.list_eval(n_points=n_i)[:,:-1]
+east_disc = east.list_eval(n_points=n_j)[::-1][:,:-1]
+south_disc = south.list_eval(n_points=n_i)[::-1][:,:-1]
+west_lower_disc = west.list_eval(u_f=0.5, n_points=n_j//2)[:,:-1]
+cap_shape_adj = np.concatenate((west_upper_disc[:-1], north_disc[:-1], 
+    east_disc[:-1], south_disc[:-1], west_lower_disc))
+with open('cap_shape_adj.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=' ')
+    writer.writerow(["x", "y"])
+    for i in range(len(cap_shape_adj)):
+        writer.writerow([cap_shape_adj[i][0], cap_shape_adj[i][1]])
 
-
-
-
-
-
-
-
-
-
+"""
+# trim conical forebody geometry
+P_fb = np.zeros((2, n_i, 3))
+P_fb[1] = north.list_eval(n_points=n_i)
+p_fb = 1
+q_fb = 3
+U_fb = auto_knot_vector(len(P_fb), p_fb)
+V_fb = auto_knot_vector(len(P_fb[0]), q_fb)
+fb_trim = BSplineSurface(p=p_fb, q=q_fb, U=U_fb, V=V_fb, P=P_fb)
+fb_trim = fb_trim.cast_to_nurbs_surface()
+nurbs_surf_to_iges(fb_trim, file_name='forebody_trimmed')
+fb_trim_disc = fb_trim.list_eval(N_u=50, N_v=n_i)
+StructuredGrid(fb_trim_disc).export_to_vtk_xml(file_name='forebody_trimmed')
+"""
 """
 from csgen.stream_utils import inlet_stream_trace, shock_surface
 from csgen.inlet_utils import inlet_blend

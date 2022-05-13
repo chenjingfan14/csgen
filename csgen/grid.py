@@ -45,6 +45,21 @@ class CircularArc():
         if self.dim == 3:
             return np.array([x, y, self.point_0[2]])
 
+    def list_eval(self, u_i=0, u_f=1, n_points=100):
+        """
+        Evalutes points along a path
+        
+        Keyword arguments:
+            u_i = initial u coordinate
+            u_f = final u coordinate
+            n_points = number of point evaluated along path
+        """
+        u_vals = np.linspace(u_i, u_f, n_points)
+        coords = np.nan * np.ones((n_points, 3))
+        for i in range(n_points):
+            coords[i] = self(u_vals[i])
+        return coords
+
 #------------------------------------------------------------------------------#
 #                               Grid Objects                                   #
 #------------------------------------------------------------------------------#
