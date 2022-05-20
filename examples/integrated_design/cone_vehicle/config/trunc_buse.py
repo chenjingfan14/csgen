@@ -83,7 +83,7 @@ for i in range(len(cap_shape)):
     cap_radii[i] = sqrt(cap_shape[i][0]**2 + cap_shape[i][1]**2)
 
 # scale and translate
-scaler = 1.2 * np.max(cap_radii) / field.Streamline.ys[0]
+scaler = 1.5 * np.max(cap_radii) / field.Streamline.ys[0]
 field.Streamline = field.Streamline.scale(scaler, scaler, scaler)
 z_shift = abs(field.Streamline.zs[0])
 field.Streamline = field.Streamline.translate(z_shift=z_shift)

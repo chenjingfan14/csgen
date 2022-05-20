@@ -41,7 +41,7 @@ design_vals = {
         'exit_press': 50E3,        # exit pressure [Pa]
         'trunc_angle': 8*pi/180,   # truncation angle of Busemann diffuser [rad]
         'smile_angle': 180*pi/180, # total smile angle of engine modules [rad]
-        'no_modules': 4,           # number of engine modules
+        'no_modules': 3,           # number of engine modules
         'blend_factor': 2.5        # inlet blending parameter
     }
 }
