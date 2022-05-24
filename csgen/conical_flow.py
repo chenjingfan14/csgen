@@ -134,14 +134,13 @@ class ConicalField():
         # calculate temperature
         return T0 * T_Tt1 * Tt1_T1 * T1_T0
 
-    def Streamline(self, design_vals, settings):
+    def Streamline(self, config):
         # unpack dictionaries
-        L_field = design_vals['field_len']
-        r0 = design_vals.get('init_radius', 1.0)
-
-        max_steps = settings.get('max_steps', 10000)
-        print_freq = settings.get('print_freq', 10)
-        verbosity = settings.get('verbosity', 1)
+        L_field = config['length']
+        r0 = config.get('init_radius', 1.0)
+        max_steps = config.get('max_steps', 10000)
+        print_freq = config.get('print_freq', 10)
+        verbosity = config.get('verbosity', 1)
 
         def stream_eqn(theta, r):
             # polar form of the streamline equation
