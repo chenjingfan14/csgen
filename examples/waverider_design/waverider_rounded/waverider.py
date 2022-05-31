@@ -52,12 +52,12 @@ n_phi = 101
 # create cone cross-section at z=z_base
 r_cone = z_base * tan(field.thetac)
 cone_base = Ellipse(r_cone, r_cone)
-cone_base_coords = cone_base.list_eval(n_points=101)
+cone_base_coords = cone_base.discretize(n_points=101)
 
 # create shock cross-section at z=z_base
 r_shock = z_base * tan(field.beta)
 shock_base = Ellipse(r_shock, r_shock)
-shock_base_coords = shock_base.list_eval(n_points=101)
+shock_base_coords = shock_base.discretize(n_points=101)
 
 # create base contour for bottom surface of waverider
 phi_int = -55*pi/180
@@ -79,7 +79,7 @@ P_bot = [[0, max_y_bot],
 p_bot = 3
 U_bot = auto_knot_vector(len(P_bot), p_bot)
 wr_bot = BSpline(P=P_bot, p=p_bot, U=U_bot)
-wr_bot_coords = wr_bot.list_eval(n_points=n_phi)
+wr_bot_coords = wr_bot.discretize(n_points=n_phi)
 
 # create base contour for top surface of waverider
 P_top = [[0, max_y_top],
@@ -91,7 +91,7 @@ P_top = [[0, max_y_top],
 p_top = 3
 U_top = auto_knot_vector(len(P_top), p_top)
 wr_top = BSpline(P=P_top, p=p_top, U=U_top)
-wr_top_coords = wr_top.list_eval(n_points=n_phi)
+wr_top_coords = wr_top.discretize(n_points=n_phi)
 
 # plot cross-section at z=z_base
 plt.figure(figsize=(16, 9))
@@ -145,32 +145,3 @@ StructuredGrid(bot_surf).export_to_vtk_xml(file_name='waverider_bot')
 StructuredGrid(top_surf).export_to_vtk_xml(file_name='waverider_top')
 StructuredGrid(cone_surf).export_to_vtk_xml(file_name='cone_surf')
 StructuredGrid(shock_surf).export_to_vtk_xml(file_name='shock_surf')
-
-#------------------------------------------------------------------------------#
-#                          Generate NURBS Patches                              #
-#------------------------------------------------------------------------------#
-"""
-Patch topology:
-        _
-       /|\
-      / | \
-     /  |  \
-    / \ | / \
-   /   \|/   \
-  /     |     \
- /      |      \
-/       |       \
------------------
-"""
-# calculate points
-nose = bot_surf[n_phi//2][0]
-mid = bot_surf[n_phi//2][len(bot_surf[0])//2]
-back = bot_surf[n_phi//2][-1]
-back_left = bot_surf[0][0]
-back_right = bot_surf[-1][0]
-front_left = bot_surf[n_phi//8][0]
-back_left = bot_surf[7*n_phi//8][0]
-
-# construct boundaries
-print(front_left)
-print(mid)

@@ -69,7 +69,7 @@ P = [[-max_x, min_y], [-max_x/2, -r_cone*1.07], [0, -r_cone*1.03],
 p = 3
 U = auto_knot_vector(len(P), p)
 wr_bot = BSpline(P=P, p=p, U=U)
-wr_bot_coords = wr_bot.list_eval(n_points=n_phi)
+wr_bot_coords = wr_bot.list_eval(u_f =0.5, n_points=n_phi)
 
 # create baseline contour for top surface of waverider
 P = [[-max_x, min_y], [-max_x/2, max_y*0.8], [0, max_y*0.7], 
@@ -77,7 +77,7 @@ P = [[-max_x, min_y], [-max_x/2, max_y*0.8], [0, max_y*0.7],
 p = 3
 U = auto_knot_vector(len(P), p)
 wr_top = BSpline(P=P, p=p, U=U)
-wr_top_coords = wr_top.list_eval(n_points=n_phi)
+wr_top_coords = wr_top.list_eval(u_f =0.5, n_points=n_phi)
 
 # plot cross-section at z=z_base
 plt.figure(figsize=(16, 9))
