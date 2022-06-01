@@ -53,10 +53,21 @@ frustrum = NURBSSurface(P=P_frust, G=G_frust,
                         p=p_frust, q=q_frust, 
                         U=U_frust, V=V_cone)
 
-surf_to_vtk(nose_cone, file_name='init_nose', N_u=20, N_v=21)
-surf_to_vtk(frustrum, file_name='frustrum', N_u=20, N_v=21)
+# export surfaces as VTK
+N_u = 100; N_v = 101
+surf_to_vtk(nose_cone, file_name='init_nose', N_u=N_u, N_v=N_v)
+surf_to_vtk(frustrum, file_name='frustrum', N_u=N_u, N_v=N_v)
 
 def perturb_cone(design_vars):
+    """
+    Deforms the shape of a nose cone for a new set of design variables.
+
+    Parameters:
+        design_vars (dict): design variables
+
+    Returns:
+        deformed_hull (NURBSSurface): deformed nose cone
+    """
     deformed_hull = copy.deepcopy(nose_cone)
     for key in design_vars:
         split_name = key.split('_')
@@ -65,11 +76,23 @@ def perturb_cone(design_vars):
             deformed_hull.P[i][j][0] = design_vars[key]
         if split_name[0] == 'y':
             deformed_hull.P[i][j][1] = design_vars[key]
+    
+    # ensure surface remains closed
     deformed_hull.P[:,-1] = deformed_hull.P[:,0]
 
     return deformed_hull
 
 def drag_coeff_grid(grid):
+    """
+    Calculates the total drag coefficient on a structured grid using Newtonian
+    flow.
+
+    Parameters:
+        grid (np.ndarray): structured grid
+
+    Returns:
+        (float): total drag coefficient
+    """
     n_i = len(grid); n_j = len(grid[0])
     c_d_sum = 0.0
     n_lines = 0 
@@ -85,6 +108,15 @@ def drag_coeff_grid(grid):
     return c_d_sum / n_lines
 
 def vol_con(grid):
+    """
+    Calculates penalty when a given grid enters the frustrum volume.
+
+    Parameters:
+        grid (np.ndarray): structured grid
+
+    Returns:
+        penalty (float): penalty for entering frustrum
+    """
     n_i = len(grid); n_j = len(grid[0])
     penalty = 0.0
     for i in range(n_i):
@@ -97,8 +129,17 @@ def vol_con(grid):
                     penalty += (r_min - r_surf)**2
     return penalty
 
-
 def driver(design_vars):
+    """
+    Function to drive optimizer.
+
+    Parameters:
+        design_vars (dict): design variables
+
+    Returns:
+        funcs (dict): objective and constraint functions
+        fail (bool): flag to determine if optimization has failed
+    """
     # perturb cone
     deformed_cone = perturb_cone(design_vars)
 
@@ -113,9 +154,10 @@ def driver(design_vars):
 
     return funcs, fail
 
+# initialise optimization problem
 opt_prob = Optimization('Drag Minimization of Nose Cone', driver)
 
-# design variables
+# add design variables
 x_tol = 0.5; y_tol = 0.5
 N_Pu = len(P_cone); N_Pv = len(P_cone[0])
 for i in range(1, N_Pu):
@@ -133,7 +175,7 @@ for i in range(1, N_Pu):
         opt_prob.addVar(f'y_{i}_{j}', varType='c', value=y_val, 
                         lower=lower_y_val, upper=upper_y_val)
 
-# objective and constraints
+# add objective and constraints
 opt_prob.addObj('drag_coeff')
 opt_prob.addCon('volume', lower=None, upper=0.0)
 
@@ -145,4 +187,4 @@ print(sol)
 
 # save grid of optimized geometry
 nose_opt = perturb_cone(sol.xStar)
-surf_to_vtk(nose_opt, file_name='opt_nose', N_u=20, N_v=21)
+surf_to_vtk(nose_opt, file_name='opt_nose', N_u=N_u, N_v=N_v)
