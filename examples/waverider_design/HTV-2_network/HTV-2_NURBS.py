@@ -2,6 +2,7 @@ from nurbskit.path import BSpline
 from nurbskit.surface import BSplineSurface
 from nurbskit.utils import auto_knot_vector
 from nurbskit.visualisation import path_plot_2D
+from nurbskit.file_io import nurbs_surf_to_iges
 from csgen.grid import StructuredGrid
 from math import pi, sin, cos
 import numpy as np
@@ -62,7 +63,7 @@ ax.set_xlabel('$x$')
 ax.set_ylabel('$y$')
 plt.axis('equal')
 plt.grid()
-plt.savefig('base.svg', bbox_inches='tight')
+plt.savefig('base.png', bbox_inches='tight')
 
 # construct B-Spline surface
 N_u = 5
@@ -96,8 +97,7 @@ vehicle = BSplineSurface(p=p, q=q, U=U, V=V, P=P)
 # create frustrum with NURBS
 h1 = 0.175; h2 = 0.45; l = 2.0
 
-
-
-# export discretized surface as VTK
+# export as IGES and VTK
+nurbs_surf_to_iges(vehicle.cast_to_nurbs_surface(), file_name='HTV-2')
 vehicle_grid = vehicle.discretize(N_u=100, N_v=101)
 StructuredGrid(vehicle_grid).export_to_vtk_xml(file_name='HTV-2')

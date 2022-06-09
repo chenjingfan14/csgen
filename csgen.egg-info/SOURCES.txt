@@ -1,0 +1,6 @@
+README.md
+setup.py
+csgen.egg-info/PKG-INFO
+csgen.egg-info/SOURCES.txt
+csgen.egg-info/dependency_links.txt
+csgen.egg-info/top_level.txt

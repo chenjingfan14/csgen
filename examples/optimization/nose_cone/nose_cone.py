@@ -144,7 +144,7 @@ def driver(design_vars):
     deformed_cone = perturb_cone(design_vars)
 
     # evaluate grid for cone
-    deformed_grid = deformed_cone.list_eval(N_u=20, N_v=21)
+    deformed_grid = deformed_cone.discretize(N_u=20, N_v=21)
 
     # evaluate drag coefficient
     funcs = {}
