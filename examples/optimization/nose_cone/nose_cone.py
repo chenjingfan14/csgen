@@ -3,7 +3,7 @@ Optimization of a nose cone with a volume constraint.
 
 Author: Reece Otto 30/05/2022
 """
-from math import sin, atan, sqrt, acos
+from math import sin, cos, atan, sqrt, acos
 from nurbskit.surface import NURBSSurface
 from nurbskit.visualisation import surf_plot_3D
 from nurbskit.utils import auto_knot_vector
@@ -15,30 +15,28 @@ from pyoptsparse import SLSQP, Optimization, History
 import copy
 
 # construct initial nose cone shape with NURBS
-a = 1; b = 1; L = 5; n_i = 5
+a = 1.83; b = 1.83; L = 4.88; n_i = 4
 P_ellipse = np.array([[-a, 0.0, L], [-a, b, L], [0.0, b, L], [a, b, L], 
     [a, 0.0, L], [a, -b, L], [0.0, -b, L], [-a, -b, L], [-a, 0.0, L]])
-G_ellipse = np.array([1, 1, 2, 1, 1, 1, 2, 1, 1])
+G_ellipse = np.array([1, sqrt(2)/2, 1, sqrt(2)/2, 1, sqrt(2)/2, 1, sqrt(2)/2, 1])
 
 P_cone = np.zeros((n_i, len(P_ellipse), 3))
 G_cone = np.zeros((n_i, len(G_ellipse)))
 for i in range(n_i):
     P_cone[i] = i/(n_i - 1) * P_ellipse
-    if i == 1:
-        for j in range(len(P_cone[0])):
-            P_cone[i,j,2] = 0.0
     G_cone[i] = G_ellipse
 
-p_cone = 4
+p_cone = 3
 q_cone = 2
 U_cone = auto_knot_vector(len(P_cone), p_cone)
 V_cone = [0, 0, 0, 1/4, 1/4, 1/2, 1/2, 3/4, 3/4, 1, 1, 1]
+#V_cone = auto_knot_vector(len(P_cone[0]), q_cone)
 nose_cone = NURBSSurface(P=P_cone, G=G_cone, 
                          p=p_cone, q=q_cone, 
                          U=U_cone, V=V_cone)
 
 # construct frustrum
-r_b = 0.75
+r_b = 1.0
 P_circle = np.array([[-r_b, 0.0, L], [-r_b, r_b, L], [0.0, r_b, L], 
     [r_b, r_b, L], [r_b, 0.0, L], [r_b, -r_b, L], [0.0, -r_b, L], 
     [-r_b, -r_b, L], [-r_b, 0.0, L]])
@@ -54,7 +52,7 @@ frustrum = NURBSSurface(P=P_frust, G=G_frust,
                         U=U_frust, V=V_cone)
 
 # export surfaces as VTK
-N_u = 100; N_v = 101
+N_u = 20; N_v = 21
 surf_to_vtk(nose_cone, file_name='init_nose', N_u=N_u, N_v=N_v)
 surf_to_vtk(frustrum, file_name='frustrum', N_u=N_u, N_v=N_v)
 
@@ -76,16 +74,59 @@ def perturb_cone(design_vars):
             deformed_hull.P[i][j][0] = design_vars[key]
         if split_name[0] == 'y':
             deformed_hull.P[i][j][1] = design_vars[key]
+        if split_name[0] == 'G':
+            deformed_hull.G[i][j] = design_vars[key]
     
     # ensure surface remains closed
     deformed_hull.P[:,-1] = deformed_hull.P[:,0]
 
     return deformed_hull
 
+def triangle_area(vertices):
+    """
+    Calculates the area of a 3D triangle.
+
+    Parameters:
+        vertices (tuple[np.ndarray, np.ndarray, np.ndarray]): position vectors 
+            of triangle vertices
+
+    Returns:
+        (float): area of triangle
+    """
+    a_vec = vertices[1] - vertices[0]
+    b_vec = vertices[2] - vertices[0]
+    return 0.5 * np.linalg.norm(np.cross(a_vec, b_vec))
+
+def quad_area(lower_left, upper_left, lower_right, upper_right):
+    """
+    Calculates the area of a 3D quadrilateral.
+
+    Parameters:
+        lower_left (np.ndarray): lower left corner of quad
+        upper_left (np.ndarray): upper left corner of quad
+        lower_right (np.ndarray): lower right corner of quad
+        upper_right (np.ndarray): upper right corner of quad
+
+    Returns:
+        (float): area of quad
+    """
+    a_vec = lower_right - lower_left; b_vec = upper_left - lower_left
+    c_vec = upper_right - upper_left; d_vec = upper_right - lower_right
+
+    a = np.linalg.norm(a_vec); b = np.linalg.norm(b_vec)
+    c = np.linalg.norm(c_vec); d = np.linalg.norm(d_vec)
+
+    s = (a + b + c + d)/2
+    theta_1 = acos(np.dot(a_vec, b_vec) / (a*b))
+    theta_2 = acos(np.dot(c_vec, d_vec) / (c*d))
+    theta = (theta_1 + theta_2)/2
+
+    return sqrt((s - a)*(s - b)*(s - c)*(s - d) - a*b*c*d*(cos(theta))**2)
+
 def drag_coeff_grid(grid):
     """
-    Calculates the total drag coefficient on a structured grid using Newtonian
-    flow.
+    Calculates the area-averaged drag coefficient on a structured grid using 
+    Newtonian flow.
 
     Parameters:
         grid (np.ndarray): structured grid
@@ -94,18 +135,28 @@ def drag_coeff_grid(grid):
         (float): total drag coefficient
     """
     n_i = len(grid); n_j = len(grid[0])
-    c_d_sum = 0.0
-    n_lines = 0 
+    c_d_sum = 0.0; area = 0.0
     for i in range(n_i-1):
-        for j in range(n_j):
-            del_x = grid[i+1][j][0] - grid[i][j][0]
-            del_y = grid[i+1][j][1] - grid[i][j][1]
-            del_z = grid[i+1][j][2] - grid[i][j][2]
-            del_r = sqrt(del_x**2 + del_y**2 + del_z**2)
-            theta = acos(del_z/del_r)
-            c_d_sum += 2*(sin(theta))**3
-            n_lines += 1
-    return c_d_sum / n_lines
+        for j in range(n_j-1):
+            # vertices for current quad
+            P00 = grid[i][j]; P10 = grid[i+1][j] 
+            P01 = grid[i][j+1]; P11 = grid[i+1][j+1]
+            
+            # find average angle of quad away from z-axis
+            b_vec = P10 - P00; d_vec = P11 - P01
+            b = np.linalg.norm(b_vec); d = np.linalg.norm(d_vec)
+            alpha_1 = acos(b_vec[2]/b); alpha_2 = acos(d_vec[2]/d)
+            alpha = (alpha_1 + alpha_2)/2
+
+            # area-weighted sum
+            if i == 0:
+                dA = triangle_area((P00, P01, P11))
+            else:
+                dA = quad_area(P00, P10, P01, P11)
+            c_d_sum += dA*2*(sin(alpha))**3
+            area += dA
+
+    return c_d_sum/area
 
 def vol_con(grid):
     """
@@ -143,8 +194,8 @@ def driver(design_vars):
     # perturb cone
     deformed_cone = perturb_cone(design_vars)
 
-    # evaluate grid for cone
-    deformed_grid = deformed_cone.discretize(N_u=20, N_v=21)
+    # discretize cone geometry
+    deformed_grid = deformed_cone.discretize(N_u=N_u, N_v=N_v)
 
     # evaluate drag coefficient
     funcs = {}
@@ -158,22 +209,20 @@ def driver(design_vars):
 opt_prob = Optimization('Drag Minimization of Nose Cone', driver)
 
 # add design variables
-x_tol = 0.5; y_tol = 0.5
 N_Pu = len(P_cone); N_Pv = len(P_cone[0])
 for i in range(1, N_Pu):
-    for j in range(N_Pv-1):
+    for j in range(N_Pv):
+        opt_prob.addVar(f'x_{i}_{j}', varType='c', value=nose_cone.P[i][j][0], 
+                        lower=None, upper=None)
+
+        opt_prob.addVar(f'y_{i}_{j}', varType='c', value=nose_cone.P[i][j][1], 
+                        lower=None, upper=None)
+
+        """
+        opt_prob.addVar(f'G_{i}_{j}', varType='c', value=nose_cone.G[i][j], 
+                        lower=None, upper=None)
+        """
         
-        x_val = nose_cone.P[i][j][0]
-        lower_x_val = x_val - x_tol
-        upper_x_val = x_val + x_tol
-        opt_prob.addVar(f'x_{i}_{j}', varType='c', value=x_val, 
-                        lower=lower_x_val, upper=upper_x_val)
-        
-        y_val = nose_cone.P[i][j][1]
-        lower_y_val = y_val - y_tol
-        upper_y_val = y_val + y_tol
-        opt_prob.addVar(f'y_{i}_{j}', varType='c', value=y_val, 
-                        lower=lower_y_val, upper=upper_y_val)
 
 # add objective and constraints
 opt_prob.addObj('drag_coeff')
