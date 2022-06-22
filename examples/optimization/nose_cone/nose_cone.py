@@ -200,7 +200,7 @@ def driver(design_vars):
     # evaluate drag coefficient
     funcs = {}
     funcs['drag_coeff'] = drag_coeff_grid(deformed_grid)
-    funcs['volume'] = vol_con(deformed_grid)
+    #funcs['volume'] = vol_con(deformed_grid)
     fail = False
 
     return funcs, fail
@@ -210,7 +210,7 @@ opt_prob = Optimization('Drag Minimization of Nose Cone', driver)
 
 # add design variables
 N_Pu = len(P_cone); N_Pv = len(P_cone[0])
-for i in range(1, N_Pu):
+for i in range(1, N_Pu-1):
     for j in range(N_Pv):
         opt_prob.addVar(f'x_{i}_{j}', varType='c', value=nose_cone.P[i][j][0], 
                         lower=None, upper=None)
@@ -226,7 +226,7 @@ for i in range(1, N_Pu):
 
 # add objective and constraints
 opt_prob.addObj('drag_coeff')
-opt_prob.addCon('volume', lower=None, upper=0.0)
+#opt_prob.addCon('volume', lower=None, upper=0.0)
 
 # solve optimization problem
 opt_options = {'IPRINT': 1, 'ACC':1E-06}
