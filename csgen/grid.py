@@ -4,13 +4,14 @@ Grid creation tools.
 Author: Reece Otto 02/05/2022
 """
 import numpy as np
+import csv
 from math import isclose, sqrt, atan2, sin, cos
 from vtkmodules.vtkCommonDataModel import vtkStructuredGrid
 from vtkmodules.vtkCommonCore import vtkPoints, vtkDoubleArray
 from vtkmodules.vtkIOXML import vtkXMLStructuredGridWriter
 
 #------------------------------------------------------------------------------#
-#                                Path Objects                                  #
+#                                  Paths                                       #
 #------------------------------------------------------------------------------#
 class CircularArc():
     # creates parametric circular arc on x-y plane from point_0 to point_1
@@ -61,7 +62,7 @@ class CircularArc():
         return coords
 
 #------------------------------------------------------------------------------#
-#                               Grid Objects                                   #
+#                                   Grids                                      #
 #------------------------------------------------------------------------------#
 class StructuredGrid():
     def __init__(self, point_array, point_data=None):
@@ -73,31 +74,54 @@ class StructuredGrid():
         self.dimensions = point_array.shape
         self.point_data = point_data
 
-    def export_to_vtk_xml(self, file_name='s_grid'):
+    def export_to_vtk_xml(self, filename='s_grid'):
         n_i = len(self.point_array)
         n_j = len(self.point_array[0])
-        n_k = 1
+        if len(self.dimensions) == 4:
+            n_k = len(self.point_array[0][0])
+        else:
+            n_k = 1
 
         s_grid = vtkStructuredGrid()
         s_grid.SetDimensions([n_i, n_j, n_k])
         points = vtkPoints()
         points.Allocate(n_i*n_j*n_k)
 
-        for j in range(n_j):
-            j_offset = j*n_i
-            for i in range(n_i):
-                offset = i + j_offset
-                points.InsertPoint(offset, self.point_array[i][j])
+        for k in range(n_k):
+            k_offset = k*n_i*n_j
+            for j in range(n_j):
+                j_offset = j*n_i
+                for i in range(n_i):
+                    offset = i + j_offset + k_offset
+                    if len(self.dimensions) == 3:
+                        points.InsertPoint(offset, self.point_array[i][j])
+                    elif len(self.dimensions) == 4:
+                        points.InsertPoint(offset, self.point_array[i][j][k])
 
         s_grid.SetPoints(points)
         writer = vtkXMLStructuredGridWriter()
         writer.SetInputData(s_grid)
-        writer.SetFileName(file_name + '.vtu')
+        writer.SetFileName(filename + '.vtu')
         writer.SetDataModeToAscii()
         writer.Update()
 
+def import_dat(file_name):
+    with open(file_name) as grid_file:
+        raw_data = list(csv.reader(grid_file, delimiter=" "))
+        n_blocks = int(raw_data[0][0])
+        blocks = [None] * n_blocks
+        line = 1
+        for n in range(n_blocks):
+            n_i = int(raw_data[line][0]); n_j = int(raw_data[line][1])
+            block_i = np.array(raw_data[line+1:line+1+n_i*n_j], dtype=float)
+            block_i = np.reshape(block_i, (n_i, n_j, 3))
+            blocks[n] = block_i
+            line += n_i*n_j + 1
+
+    return blocks
+
 #------------------------------------------------------------------------------#
-#                             Surface Objects                                  #
+#                                Surfaces                                      #
 #------------------------------------------------------------------------------#
 class CoonsPatch():
     def __init__(self, north, south, east, west):
@@ -120,4 +144,5 @@ class CoonsPatch():
         for i in range(n_s):
             for j in range(n_t):
                 grid[i][j] = self(ss[i], ts[j])
+        
         return grid

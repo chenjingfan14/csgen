@@ -52,12 +52,12 @@ n_phi = 51
 # create cone cross-section at z=z_base
 r_cone = z_base * tan(field.thetac)
 cone_base = Ellipse(r_cone, r_cone)
-cone_base_coords = cone_base.list_eval(n_points=n_phi)
+cone_base_coords = cone_base.discretize(n_points=n_phi)
 
 # create shock cross-section at z=z_base
 r_shock = z_base * tan(field.beta)
 shock_base = Ellipse(r_shock, r_shock)
-shock_base_coords = shock_base.list_eval(n_points=n_phi)
+shock_base_coords = shock_base.discretize(n_points=n_phi)
 
 # create baseline contour for bottom surface of waverider
 max_y = 1.01 * np.amin(cone_base_coords[:,1])
@@ -69,7 +69,7 @@ P = [[-max_x, min_y], [-max_x/2, -r_cone*1.07], [0, -r_cone*1.03],
 p = 3
 U = auto_knot_vector(len(P), p)
 wr_bot = BSpline(P=P, p=p, U=U)
-wr_bot_coords = wr_bot.list_eval(u_f =0.5, n_points=n_phi)
+wr_bot_coords = wr_bot.discretize(u_f =0.5, n_points=n_phi)
 
 # create baseline contour for top surface of waverider
 P = [[-max_x, min_y], [-max_x/2, max_y*0.8], [0, max_y*0.7], 
@@ -77,7 +77,7 @@ P = [[-max_x, min_y], [-max_x/2, max_y*0.8], [0, max_y*0.7],
 p = 3
 U = auto_knot_vector(len(P), p)
 wr_top = BSpline(P=P, p=p, U=U)
-wr_top_coords = wr_top.list_eval(u_f =0.5, n_points=n_phi)
+wr_top_coords = wr_top.discretize(u_f =0.5, n_points=n_phi)
 
 # plot cross-section at z=z_base
 plt.figure(figsize=(16, 9))
